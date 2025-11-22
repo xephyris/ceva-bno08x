@@ -1,0 +1,14 @@
+[package]
+name = "ceva-bno08x"
+version = "0.0.0"
+description = "Temporary Placeholder for upcoming project"
+readme = "README.md"
+keywords = []
+repository = "https://github.com/xephyris/ceva-bno08x"
+license-file = "LICENSE"
+authors = ["xephyris"]
+edition = "2024"
+
+[dependencies]
+
+[features]
