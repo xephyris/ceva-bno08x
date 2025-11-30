@@ -10,5 +10,8 @@ authors = ["xephyris"]
 edition = "2024"
 
 [dependencies]
+defmt = "1.0.1"
+embedded-hal = "1.0.0"
+panic-probe = { version = "1.0.0", features = ["defmt", "defmt-error", "print-defmt"] }
 
 [features]
