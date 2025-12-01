@@ -10,8 +10,10 @@ use hal::spi::*;
 
 use defmt::*;
 
+use crate::data::{Packet, VarBuf};
 use crate::register::*;
 
+pub mod data;
 pub mod error;
 mod register;
 
@@ -23,6 +25,8 @@ pub struct BNO08x<SPI, D, IP, WP, RP> {
     reset: RP,
     delay: D,
     irq_time: u32,
+    seq_num_w: [u32; 6],
+    seq_num_r: [u32; 6],
 }
 
 impl<SPI, D, IP, WP, RP> BNO08x<SPI, D, IP, WP, RP>
@@ -41,6 +45,8 @@ where
             reset,
             delay,
             irq_time: 5,
+            seq_num_w: [0; 6],
+            seq_num_r: [0; 6],
         }
     }
 
@@ -59,6 +65,8 @@ where
             reset,
             delay,
             irq_time,
+            seq_num_w: [0; 6],
+            seq_num_r: [0; 6],
         }
     }
 
@@ -107,15 +115,20 @@ where
         info!("{:X} ", header);
     }
 
-    pub fn read_product_id(&mut self) -> Result<[u8; 255], MyError<SPI>> {
-        let buf = [Register::Write(SH2Write::ProductIDRequest).addr(), 0];
+    pub fn read_product_id(&mut self) -> Result<(), MyError<SPI>> {
+        let buf = [Register::Write(SH2Write::ProductIDRequest).addr()];
         info!("Sending buffer {}", &buf);
-        let mut r_buf = [0; 255];
+        let mut out = Packet::new();
+        self.wait_for_interrupt();
         self.spi
-            .transaction(&mut [Operation::Write(&buf), Operation::Read(&mut r_buf)])
+            .transaction(&mut [Operation::Write(&buf), Operation::Read(out.as_mut_header())])
             .ok();
-        info!("{:X}", r_buf);
-        Ok(r_buf)
+        out.process_header();
+        self.spi
+            .transaction(&mut [Operation::Write(&buf), Operation::Read(out.as_mut_data())])
+            .ok();
+        info!("{:X}", out.as_mut_data());
+        Ok(())
     }
 }
 
