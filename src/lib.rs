@@ -25,8 +25,8 @@ pub struct BNO08x<SPI, D, IP, WP, RP> {
     reset: RP,
     delay: D,
     irq_time: u32,
-    seq_num_w: [u32; 6],
-    seq_num_r: [u32; 6],
+    seq_num_w: [u8; 6],
+    seq_num_r: [u8; 6],
 }
 
 impl<SPI, D, IP, WP, RP> BNO08x<SPI, D, IP, WP, RP>
@@ -116,19 +116,48 @@ where
     }
 
     pub fn read_product_id(&mut self) -> Result<(), MyError<SPI>> {
-        let buf = [Register::Write(SH2Write::ProductIDRequest).addr()];
-        info!("Sending buffer {}", &buf);
+        let mut buf = Packet::from_data_buf(
+            &[Register::Write(SH2Write::ProductIDRequest).addr(), 0x00],
+            2,
+            self.seq_num_w[2],
+        )
+        .expect("Packet Channel Invalid");
+        info!("Sending buffer {}", buf.full_packet().as_slice());
         let mut out = Packet::new();
+        self.increment_seq_num(true, 2, None);
+        info!(
+            "FULL PACKET WITH SHTP HEADER {}",
+            buf.full_packet().as_slice()
+        );
+        // self.wait_for_interrupt();
+        self.spi
+            .transaction(&mut [Operation::Write(&buf.full_packet())])
+            .ok();
         self.wait_for_interrupt();
         self.spi
-            .transaction(&mut [Operation::Write(&buf), Operation::Read(out.as_mut_header())])
+            .transaction(&mut [Operation::Read(out.as_mut_header())])
             .ok();
-        out.process_header();
+
+        out.process_header(true);
         self.spi
-            .transaction(&mut [Operation::Write(&buf), Operation::Read(out.as_mut_data())])
+            .transaction(&mut [Operation::TransferInPlace(out.as_mut_data())])
             .ok();
         info!("{:X}", out.as_mut_data());
         Ok(())
+    }
+
+    fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) {
+        match read_write {
+            true => {
+                let temp = self.seq_num_w[channel as usize] as u16;
+                self.seq_num_w[channel as usize] = ((temp + 1) % 256) as u8;
+            }
+            false => {
+                if let Some(num) = seq_num {
+                    self.seq_num_w[channel as usize] = num
+                }
+            }
+        }
     }
 }
 

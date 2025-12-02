@@ -1,12 +1,12 @@
 use defmt::info;
-use heapless::Vec;
+use heapless::{Vec, vec};
 
 pub struct Packet {
     length: u16,
     channel: u8,
     seq_num: u8,
     header: heapless::Vec<u8, 4>,
-    data: heapless::Vec<u8, 32767>,
+    data: heapless::Vec<u8, 32763>,
 }
 
 impl Packet {
@@ -28,19 +28,51 @@ impl Packet {
             header: Vec::from_slice(&buf[..4]).expect("Packet creation error"),
             data: Vec::from_slice(&buf[4..]).expect("Packet creation error"),
         };
-        temp.calculate_length();
+        temp.process_header(false);
         temp
+    }
+
+    pub fn from_data_buf(
+        buf: &[u8],
+        channel: u8,
+        seq_num: u8,
+    ) -> Result<Self, crate::data::PacketError> {
+        let mut temp = Packet {
+            length: 0,
+            channel: channel,
+            seq_num: 0,
+            header: Vec::from_array([0; 4]),
+            data: Vec::from_slice(buf).expect("Packet creation error"),
+        };
+        temp.generate_header(buf);
+        if channel < 6 {
+            Ok(temp)
+        } else {
+            Err(PacketError::InvalidChannel)
+        }
+    }
+
+    fn generate_header(&mut self, data_buf: &[u8]) {
+        let length = data_buf.len() as u16;
+        let length_slice: [u8; 2] = length.to_le_bytes();
+        self.header[0] = length_slice[0];
+        self.header[1] = length_slice[1];
+        self.header[2] = self.channel;
+        self.seq_num = 0;
+        self.header[3] = self.seq_num;
     }
 
     pub fn as_mut_header(&mut self) -> &mut [u8] {
         &mut self.header
     }
 
-    pub fn process_header(&mut self) {
+    pub fn process_header(&mut self, resize: bool) {
         info!("HEADER: {:X}", self.header.as_slice());
         self.calculate_length();
         info!("LENGTH DATA: {}", self.length);
-        self.data.resize(self.length as usize, 0);
+        if resize {
+            self.data.resize(self.data_length() as usize, 0);
+        }
         self.channel = self.header[2];
         self.seq_num = self.header[3];
     }
@@ -64,7 +96,7 @@ impl Packet {
     }
 
     pub fn data_length(&self) -> u16 {
-        self.length - 4
+        if self.length > 4 { self.length - 4 } else { 0 }
     }
 
     pub fn get_data_report(&mut self) -> (u16, &mut [u8]) {
@@ -74,10 +106,20 @@ impl Packet {
     pub fn as_mut_data(&mut self) -> &mut [u8] {
         &mut self.data
     }
+
+    pub fn full_packet(&mut self) -> Vec<u8, 32767> {
+        let mut temp: Vec<u8, 32767> =
+            Vec::from_slice(self.as_mut_header()).expect("Failed to create full packet");
+        temp.extend_from_slice(self.as_mut_data())
+            .expect("Failed to attach data slice to full packet");
+        temp
+    }
 }
 
+#[derive(Debug)]
 pub enum PacketError {
     HalfPacket,
+    InvalidChannel,
 }
 
 pub struct VarBuf {
