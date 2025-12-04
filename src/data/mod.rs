@@ -69,12 +69,12 @@ impl Packet {
     pub fn process_header(&mut self, resize: bool) {
         info!("HEADER: {:#X}", self.header.as_slice());
         self.calculate_length();
-        info!("LENGTH DATA: {}", self.length);
+        // info!("LENGTH DATA: {}", self.length);
         if resize {
             self.data.resize(self.data_length() as usize, 0);
         }
-        self.channel = self.header[2];
-        self.seq_num = self.header[3];
+        self.channel = u8::from_le_bytes([self.header[2]]);
+        self.seq_num = u8::from_le_bytes([self.header[3]]);
     }
 
     fn calculate_length(&mut self) -> Result<(), PacketError> {
@@ -121,6 +121,15 @@ impl Packet {
 
     pub fn seq_num(&self) -> u8 {
         self.seq_num
+    }
+
+    pub fn report_id(&self) -> u8 {
+        if self.data_length() > 0 {
+            0
+            // self.data.get(0).unwrap_or(&0).clone()
+        } else {
+            0
+        }
     }
 }
 

@@ -17,6 +17,10 @@ pub mod data;
 pub mod error;
 mod register;
 
+const WRITE: bool = true;
+const READ: bool = false;
+const TIMEOUT: u32 = 2000000;
+
 // BAUD RATE MUST BE 100000 HZ AT 3MHZ SPI FREQUENCY!!!!!!
 #[derive(Debug)]
 pub struct BNO08x<SPI, D, IP, WP, RP> {
@@ -103,17 +107,21 @@ where
         info!("BNO08x Device Reset");
     }
 
+    pub fn soft_reset_device(&mut self) {
+        for packet in 0..3 {
+            // self.wait_for_interrupt();
+            self.read_packet();
+        }
+    }
+
     pub fn send_wake(&mut self) {
         info!("BNO08x Device Wake signal sent");
-        let mut fill_buf = [0u8; 600];
         self.wake.set_high().ok();
         self.wake.set_low().ok();
         self.wait_for_interrupt();
         self.wake.set_high().ok();
-        self.spi
-            .transaction(&mut [Operation::Read(&mut fill_buf)])
-            .ok();
-        info!("INIT READ {:#X}", &fill_buf);
+        info!("Wake finished")
+        // self.spi.transaction(&mut [Operation::Write(&[0x00])]).ok();
     }
 
     pub fn read_header(&mut self) {
@@ -121,171 +129,143 @@ where
         let mut header = [0; 4];
         self.spi.transfer_in_place(&mut header).ok();
 
-        info!("{:#X} ", header);
+        info!("R {:#X} ", header);
     }
 
-    pub fn read_packet(&mut self) {
-        let mut header = [0u8; 4];
-        let mut payload = [0u8; 272]; // max SHTP packet size
+    pub fn read_packet(&mut self) -> Packet {
+        let mut header = [0; 4];
+        // info!("Transferring");
+        // self.spi
+        //     .transaction(&mut [Operation::Transfer(&mut header)])
+        //     .ok();
+        self.spi.transfer(&mut header, &[0u8; 4]).ok();
+        let mut out = Packet::from_buf(&header);
+        out.process_header(true);
+        info!("R PACK LENGTH: {}", out.packet_length());
+        info!("R CHANNEL NUM: {}", 0);
+        info!("R SEQ NUM: {}", out.seq_num());
+        self.seq_num_r[0 as usize] = out.seq_num();
 
-        // One transaction: CS low across both ops
+        if out.packet_length() == 0 {
+            info!("NO PACKET AVAILABLE");
+        }
+
+        info!(
+            "R CHANNEL {} HAS {} BYTES AVAILABLE",
+            out.channel(),
+            out.data_length()
+        );
+        self.wait_for_interrupt();
+
+        // self.spi
+        //     .transaction(&mut [Operation::Read(out.as_mut_header())])
+        //     .ok();
+        // self.increment_seq_num(false, out.as_mut_header()[2], Some(out.as_mut_header()[3]));
+        // if out.data_length() < 273 {
         self.spi
             .transaction(&mut [
-                Operation::TransferInPlace(&mut header),
-                Operation::TransferInPlace(&mut payload),
+                Operation::TransferInPlace(&mut [0x00; 4]),
+                Operation::TransferInPlace(out.as_mut_data()),
             ])
-            .unwrap();
-
-        // Parse header
-        info!("HEADER {:#X}", &header);
-        let len = u16::from_le_bytes([header[0], header[1]]) as usize;
-        let channel = header[2];
-        let seq = header[3];
-        let data_len;
-        if len < 4 || len > 272 {
-            // Misframed → resync/reset
-            data_len = 0;
-        } else {
-            data_len = len - 4;
+            .ok();
+        if out.data_length() < 300 {
+            info!("R DATA: {:#X}", out.as_mut_data());
         }
-        let data = &payload[..data_len];
-
-        // Process packet
-        println!(
-            "len={}, channel={}, seq={}, data={:#X}",
-            len, channel, seq, data
-        );
+        out
     }
 
-    // pub fn read_packet(&mut self) {
-    //     let mut out = Packet::new();
-    //     self.wait_for_interrupt();
-    //     self.spi
-    //         .transaction(&mut [Operation::Read(out.as_mut_header())])
-    //         .ok();
-    //     self.increment_seq_num(false, out.as_mut_header()[2], Some(out.as_mut_header()[3]));
-    //     out.process_header(true);
-    //     self.spi
-    //         .transaction(&mut [Operation::TransferInPlace(out.as_mut_data())])
-    //         .ok();
-    //     info!("{:#X}", out.as_mut_data());
-    // }
-
-    // pub fn read_packet(&mut self) {
-    //     let mut header = [0; 4];
-    //     self.spi
-    //         .transaction(&mut [Operation::Transfer(&mut header, &mut [0u8; 4])])
-    //         .ok();
-    //     let mut out = Packet::from_buf(&header);
-    //     out.process_header(true);
-    //     info!("PACK LENGTH: {}", out.packet_length());
-    //     info!("CHANNEL NUM: {}", 0);
-    //     info!("SEQ NUM: {}", out.seq_num());
-    //     self.seq_num_r[0 as usize] = out.seq_num();
-
-    //     if out.packet_length() == 0 {
-    //         info!("NO PACKET AVAILABLE");
-    //     }
-
-    //     info!(
-    //         "CHANNEL {} HAS {} BYTES AVAILABLE",
-    //         out.channel(),
-    //         out.data_length()
-    //     );
-    //     self.wait_for_interrupt();
-    //     // self.spi
-    //     //     .transaction(&mut [Operation::Read(out.as_mut_header())])
-    //     //     .ok();
-    //     // self.increment_seq_num(false, out.as_mut_header()[2], Some(out.as_mut_header()[3]));
-    //     // if out.data_length() < 273 {
-    //     self.spi
-    //         .transaction(&mut [Operation::TransferInPlace(out.as_mut_data())])
-    //         .ok();
-    //     info!("DATA: {:#X}", out.as_mut_data());
-
-    //     // let mut header = [0; 4];
-    //     // self.spi
-    //     //     .transaction(&mut [Operation::Transfer(&mut header, &mut [0u8; 4])])
-    //     //     .ok();
-    //     // let mut out = Packet::from_buf(&header);
-    //     // out.process_header(true);
-    //     // info!("PACK LENGTH 2 : {}", out.packet_length());
-    //     // info!("CHANNEL NUM2 : {}", 0);
-    //     // info!("SEQ NUM 2 : {}", out.seq_num());
-    //     // self.seq_num_r[0 as usize] = out.seq_num();
-
-    //     // if out.packet_length() == 0 {
-    //     //     info!("NO PACKET AVAILABLE 2 ");
-    //     // }
-
-    //     // info!(
-    //     //     "CHANNEL {} HAS {} BYTES AVAILABLE 2",
-    //     //     out.channel(),
-    //     //     out.data_length()
-    //     // );
-
-    //     // // self.spi
-    //     // //     .transaction(&mut [Operation::Read(out.as_mut_header())])
-    //     // //     .ok();
-    //     // // self.increment_seq_num(false, out.as_mut_header()[2], Some(out.as_mut_header()[3]));
-    //     // if out.data_length() < 273 {
-    //     //     self.spi
-    //     //         .transaction(&mut [Operation::Read(out.as_mut_data())])
-    //     //         .ok();
-    //     //     info!("DATA 2 : {:#X}", out.as_mut_data());
-    //     // }
-    // }
-
-    pub fn read_product_id(&mut self) -> Result<(), MyError<SPI>> {
-        let mut buf = Packet::from_data_buf(
-            &[Register::Write(SH2Write::ProductIDRequest).addr(), 0x00],
-            2,
-            self.seq_num_w[2],
-        )
-        .expect("Packet Channel Invalid");
-        info!("Sending buffer {}", buf.full_packet().as_slice());
-        let mut out = Packet::new();
-        self.increment_seq_num(true, 2, None);
-        info!(
-            "FULL PACKET WITH SHTP HEADER {}",
-            buf.full_packet().as_slice()
-        );
-        // self.wait_for_interrupt();
-        self.spi
-            .transaction(&mut [Operation::Write(&buf.full_packet())])
-            .ok();
+    pub fn send_packet(&mut self, channel: u8, data: &[u8]) {
+        let seq = self.increment_seq_num(WRITE, channel, None);
+        let mut out = Packet::from_data_buf(data, channel, seq).expect("PacketGen failed");
         self.wait_for_interrupt();
-        self.spi
-            .transaction(&mut [Operation::TransferInPlace(out.as_mut_header())])
-            .ok();
+        self.spi.write(out.full_packet().as_slice()).ok();
+        info!("SENDING PACKET CONTENTS {}", out.full_packet().as_slice())
+    }
 
-        out.process_header(true);
-        self.spi
-            .transaction(&mut [Operation::TransferInPlace(out.as_mut_data())])
-            .ok();
-        // info!("{:#X}", out.as_mut_data());
+    pub fn wait_for_packet_type(&mut self, channel: u8, report_id: Option<u8>) -> Packet {
+        info!(
+            "Wating for packet on channel {} with report_id {}",
+            channel,
+            report_id.unwrap_or(0xFF)
+        );
+        let mut new_packet = self.wait_for_packet().expect("Packet failed");
+        // info!("REPORT ID {}", new_packet.as_mut_data());
+        loop {
+            info!("NEW PACKET CHANNEL: {}", new_packet.channel());
+            if new_packet.channel() == channel {
+                // info!("PACKET ID NEW {}", new_packet.channel());
+                if let Some(id) = report_id {
+                    // info!("PACKET ID {}", new_packet.channel());
+                    if new_packet.report_id() == 0 {
+                        return new_packet;
+                    } else {
+                        return Packet::new();
+                    }
+                } else {
+                    return new_packet;
+                }
+            } else {
+                return Packet::new();
+            }
+        }
+        return Packet::new();
+    }
+
+    pub fn read_product_id(&mut self) -> Result<(), MyError> {
+        // let mut buf = Packet::from_data_buf(
+        //     &[Register::Write(SH2Write::ProductIDRequest).addr(), 0x00],
+        //     2,
+        //     self.seq_num_w[2],
+        // )
+        // .expect("W Packet Channel Invalid");
+        // info!("READING P ID");
+        let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
+        self.send_packet(2, &buf_data);
+        let mut out =
+            self.wait_for_packet_type(2, Some(Register::Read(SH2Read::ProductIDResponse).addr()));
+        info!("R PID {:#X}", out.full_packet().as_slice());
         Ok(())
     }
 
-    fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) {
+    fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) -> u8 {
         if channel < 6 {
             match read_write {
                 true => {
                     let temp = self.seq_num_w[channel as usize] as u16;
                     self.seq_num_w[channel as usize] = ((temp + 1) % 256) as u8;
+                    ((temp + 1) % 256) as u8
                 }
                 false => {
                     if let Some(num) = seq_num {
-                        self.seq_num_w[channel as usize] = num
+                        self.seq_num_r[channel as usize] = num;
+                        num
+                    } else {
+                        let temp = self.seq_num_r[channel as usize] as u16;
+                        self.seq_num_r[channel as usize] = ((temp + 1) % 256) as u8;
+                        ((temp + 1) % 256) as u8
                     }
                 }
             }
+        } else {
+            0
         }
+    }
+
+    fn wait_for_packet(&mut self) -> Result<Packet, MyError> {
+        let mut new_packet;
+        // info!("FETCHING PACKETE");
+        self.wait_for_interrupt();
+        new_packet = self.read_packet();
+        // info!("PACKET FROM WAIT {:#X}", new_packet.as_mut_data());
+        return Ok(new_packet);
+    }
+    fn data_ready(&mut self) -> bool {
+        self.wait_for_interrupt();
+        true
     }
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum MyError<SPI> {
-    Spi(SPI),
-    // Add other errors for your driver here.
+pub enum MyError {
+    Placeholder, // Add other errors for your driver here.
 }
