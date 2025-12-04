@@ -53,7 +53,7 @@ impl Packet {
     }
 
     fn generate_header(&mut self, data_buf: &[u8]) {
-        let length = data_buf.len() as u16;
+        let length = data_buf.len() as u16 + 4;
         let length_slice: [u8; 2] = length.to_le_bytes();
         self.header[0] = length_slice[0];
         self.header[1] = length_slice[1];
@@ -67,7 +67,7 @@ impl Packet {
     }
 
     pub fn process_header(&mut self, resize: bool) {
-        info!("HEADER: {:X}", self.header.as_slice());
+        info!("HEADER: {:#X}", self.header.as_slice());
         self.calculate_length();
         info!("LENGTH DATA: {}", self.length);
         if resize {
@@ -113,6 +113,14 @@ impl Packet {
         temp.extend_from_slice(self.as_mut_data())
             .expect("Failed to attach data slice to full packet");
         temp
+    }
+
+    pub fn channel(&self) -> u8 {
+        self.channel
+    }
+
+    pub fn seq_num(&self) -> u8 {
+        self.seq_num
     }
 }
 
