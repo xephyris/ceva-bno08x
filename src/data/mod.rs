@@ -125,8 +125,7 @@ impl Packet {
 
     pub fn report_id(&self) -> u8 {
         if self.data_length() > 0 {
-            0
-            // self.data.get(0).unwrap_or(&0).clone()
+            self.data.get(0).unwrap_or(&0).clone()
         } else {
             0
         }
@@ -172,5 +171,43 @@ impl VarBuf {
 
     pub fn clone_buf(self) -> [u8; 256] {
         self.buf.clone()
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ProductId {
+    sw_ver: (u8, u8),
+    sw_part_num: u32,
+    sw_build_num: u32,
+    patch_num: u16,
+}
+
+impl ProductId {
+    pub fn new(command_buf: &[u8]) -> Self {
+        if command_buf.len() >= 15 {
+            let sw_part_num_buf: [u8; 4] =
+                command_buf[4..8].try_into().expect("Failed to parse buf");
+            let sw_build_num_buf: [u8; 4] =
+                command_buf[8..12].try_into().expect("Failed to parse buf");
+            let patch_num_buf: [u8; 2] =
+                command_buf[12..14].try_into().expect("Failed to parse buf");
+            ProductId {
+                sw_ver: (command_buf[2], command_buf[3]),
+                sw_part_num: u32::from_le_bytes(sw_part_num_buf),
+                sw_build_num: u32::from_le_bytes(sw_build_num_buf),
+                patch_num: u16::from_le_bytes(patch_num_buf),
+            }
+        } else {
+            ProductId::default()
+        }
+    }
+
+    pub fn display(&self) -> ((u8, u8), u32, u32, u16) {
+        (
+            self.sw_ver,
+            self.sw_part_num,
+            self.sw_build_num,
+            self.patch_num,
+        )
     }
 }

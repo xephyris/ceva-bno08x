@@ -10,7 +10,7 @@ use hal::spi::*;
 
 use defmt::*;
 
-use crate::data::{Packet, VarBuf};
+use crate::data::{Packet, ProductId, VarBuf};
 use crate::register::*;
 
 pub mod data;
@@ -49,7 +49,7 @@ where
             wake,
             reset,
             delay,
-            irq_time: 2,
+            irq_time: 100,
             seq_num_w: [0; 6],
             seq_num_r: [0; 6],
         }
@@ -75,12 +75,11 @@ where
         }
     }
 
-    fn wait_for_interrupt(&mut self) {
+    fn wait_for_interrupt(&mut self) -> u32 {
         let mut elapsed = 0;
-        while elapsed <= 3_000_000_000u32 / self.irq_time {
+        while elapsed <= 300_000_000u32 / self.irq_time {
             elapsed += 1;
             if self.interrupt.is_low().expect("Failed to read INT pin.") {
-                // self.delay.delay_ms(1000);
                 elapsed -= 1;
                 info!("{} / {}", elapsed, 3_000_000_000u32 / self.irq_time);
                 info!("Interrupt recieved breaking!");
@@ -88,10 +87,11 @@ where
             }
             self.delay.delay_ns(self.irq_time);
         }
-        if elapsed == 3_000_000_000u32 / self.irq_time {
+        if elapsed >= 300_000_000u32 / self.irq_time {
             info!("Hard Resetting");
             self.hard_reset_device();
         }
+        elapsed
     }
 
     pub fn hard_reset_device(&mut self) {
@@ -109,6 +109,7 @@ where
 
     pub fn soft_reset_device(&mut self) {
         for packet in 0..3 {
+            info!("FLUSHING PACKETS");
             // self.wait_for_interrupt();
             self.read_packet();
         }
@@ -118,6 +119,7 @@ where
         info!("BNO08x Device Wake signal sent");
         self.wake.set_high().ok();
         self.wake.set_low().ok();
+        info!("INT Status: {}", self.interrupt.is_high().ok());
         self.wait_for_interrupt();
         self.wake.set_high().ok();
         info!("Wake finished")
@@ -125,7 +127,8 @@ where
     }
 
     pub fn read_header(&mut self) {
-        self.wait_for_interrupt();
+        info!("INT Status: {}", self.interrupt.is_high().ok());
+        info!("{}", self.wait_for_interrupt());
         let mut header = [0; 4];
         self.spi.transfer_in_place(&mut header).ok();
 
@@ -155,7 +158,8 @@ where
             out.channel(),
             out.data_length()
         );
-        self.wait_for_interrupt();
+        info!("INT Status: {}", self.interrupt.is_high().ok());
+        info!("{}", self.wait_for_interrupt());
 
         // self.spi
         //     .transaction(&mut [Operation::Read(out.as_mut_header())])
@@ -176,10 +180,19 @@ where
 
     pub fn send_packet(&mut self, channel: u8, data: &[u8]) {
         let seq = self.increment_seq_num(WRITE, channel, None);
-        let mut out = Packet::from_data_buf(data, channel, seq).expect("PacketGen failed");
-        self.wait_for_interrupt();
-        self.spi.write(out.full_packet().as_slice()).ok();
-        info!("SENDING PACKET CONTENTS {}", out.full_packet().as_slice())
+        let mut write = Packet::from_data_buf(data, channel, seq).expect("PacketGen failed");
+        info!(
+            "SENDING PACKETS WITH CONTENTS {}",
+            write.full_packet().as_slice()
+        );
+        let mut read: heapless::Vec<u8, 32767> = heapless::Vec::new();
+        read.resize(write.packet_length() as usize, 0u8);
+        info!("INT Status: {}", self.interrupt.is_high().ok());
+        info!("{}", self.wait_for_interrupt());
+        self.spi
+            .transfer(read.as_mut(), write.full_packet().as_slice())
+            .ok();
+        info!("PACKET SENT");
     }
 
     pub fn wait_for_packet_type(&mut self, channel: u8, report_id: Option<u8>) -> Packet {
@@ -195,8 +208,8 @@ where
             if new_packet.channel() == channel {
                 // info!("PACKET ID NEW {}", new_packet.channel());
                 if let Some(id) = report_id {
-                    // info!("PACKET ID {}", new_packet.channel());
-                    if new_packet.report_id() == 0 {
+                    info!("PACKET ID {}", new_packet.report_id());
+                    if new_packet.report_id() == id {
                         return new_packet;
                     } else {
                         return Packet::new();
@@ -218,12 +231,15 @@ where
         //     self.seq_num_w[2],
         // )
         // .expect("W Packet Channel Invalid");
-        // info!("READING P ID");
+        info!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
         self.send_packet(2, &buf_data);
         let mut out =
             self.wait_for_packet_type(2, Some(Register::Read(SH2Read::ProductIDResponse).addr()));
-        info!("R PID {:#X}", out.full_packet().as_slice());
+        // info!("R PID {:#X}", out.full_packet().as_slice());
+        info!("R PID RESPONSE: {:#X}", out.as_mut_data());
+        let product_id = ProductId::new(out.as_mut_data());
+        info!("{:?}", product_id.display());
         Ok(())
     }
 
@@ -254,14 +270,10 @@ where
     fn wait_for_packet(&mut self) -> Result<Packet, MyError> {
         let mut new_packet;
         // info!("FETCHING PACKETE");
-        self.wait_for_interrupt();
+        info!("{}", self.wait_for_interrupt());
         new_packet = self.read_packet();
         // info!("PACKET FROM WAIT {:#X}", new_packet.as_mut_data());
         return Ok(new_packet);
-    }
-    fn data_ready(&mut self) -> bool {
-        self.wait_for_interrupt();
-        true
     }
 }
 
