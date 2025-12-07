@@ -30,6 +30,12 @@ pub enum SH2Write {
     CommandRequest = 0xF2,
 }
 
+#[repr(u8)]
+pub enum I2CAddress {
+    Default = 0x4A,
+    Alternate = 0x4B,
+}
+
 pub enum ReportID {
     RotationVector = 0x05,
 }
