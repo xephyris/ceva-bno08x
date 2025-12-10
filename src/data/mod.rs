@@ -5,22 +5,24 @@ pub struct Packet {
     length: u16,
     channel: u8,
     seq_num: u8,
+    spacer: bool,
     header: heapless::Vec<u8, 4>,
     data: heapless::Vec<u8, 32763>,
 }
 
 impl Packet {
-    pub fn new() -> Self {
+    pub fn new(spacer: bool) -> Self {
         Packet {
             length: 0,
             channel: 6,
             seq_num: 0,
+            spacer,
             header: Vec::from_array([0; 4]),
             data: Vec::new(),
         }
     }
 
-    pub fn from_buf(buf: &[u8]) -> Self {
+    pub fn from_buf(buf: &[u8], spacer: bool) -> Self {
         debug!("PACKET GEN IS starteed");
         // let len = buf.len();
         // debug!("{}", len);
@@ -28,14 +30,26 @@ impl Packet {
             length: 0,
             channel: 6,
             seq_num: 0,
+            spacer,
             header: Vec::from_slice(&buf[..4]).expect("Packet creation error"),
-            data: Vec::from_slice(buf.get(3..).unwrap_or(&[])).expect("Packet creation error"),
+            data: Vec::from_slice(buf.get(4..).unwrap_or(&[])).expect("Packet creation error"),
         };
         info!("PACKET GEN IS FINE");
-        if temp.data_length() > 1 {
-            temp.data.remove(0);
-        }
         temp.process_header(false);
+        temp
+    }
+
+    pub fn from_header(header: &[u8], spacer: bool) -> Self {
+        let mut temp = Packet {
+            length: 0,
+            channel: 6,
+            seq_num: 0,
+            spacer,
+            header: Vec::from_slice(&header[..4]).expect("Packet creation error"),
+            data: Vec::new(),
+        };
+        info!("PACKET GEN IS FINE");
+        temp.process_header(true);
         temp
     }
 
@@ -43,11 +57,13 @@ impl Packet {
         buf: &[u8],
         channel: u8,
         seq_num: u8,
+        spacer: bool,
     ) -> Result<Self, crate::data::PacketError> {
         let mut temp = Packet {
             length: 0,
             channel: channel,
             seq_num: 0,
+            spacer,
             header: Vec::from_array([0; 4]),
             data: Vec::from_slice(buf).expect("Packet creation error"),
         };
@@ -77,8 +93,17 @@ impl Packet {
         info!("HEADER: {:#X}", self.header.as_slice());
         self.calculate_length();
         // info!("LENGTH DATA: {}", self.length);
-        if resize {
+        if resize && !self.spacer {
             self.data.resize(self.data_length() as usize, 0);
+        } else if resize && self.spacer {
+            self.data.resize(
+                (if self.data_length() < u16::MAX - 4 {
+                    self.data_length() + 4
+                } else {
+                    self.data_length()
+                }) as usize,
+                0,
+            );
         }
         self.channel = u8::from_le_bytes([self.header[2]]);
         self.seq_num = u8::from_le_bytes([self.header[3]]);
@@ -110,14 +135,18 @@ impl Packet {
         (self.data_length(), &mut self.data)
     }
 
-    pub fn as_mut_data(&mut self) -> &mut [u8] {
-        &mut self.data
+    pub fn as_mut_data(&mut self, with_spacer: bool) -> &mut [u8] {
+        if !self.spacer || with_spacer {
+            &mut self.data
+        } else {
+            &mut self.data[4..]
+        }
     }
 
     pub fn full_packet(&mut self) -> Vec<u8, 32767> {
         let mut temp: Vec<u8, 32767> =
             Vec::from_slice(self.as_mut_header()).expect("Failed to create full packet");
-        temp.extend_from_slice(self.as_mut_data())
+        temp.extend_from_slice(self.as_mut_data(false))
             .expect("Failed to attach data slice to full packet");
         temp
     }
