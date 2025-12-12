@@ -87,25 +87,22 @@ where
         let mut out = self.read_header();
         out.process_header(true);
         info!("R PACK LENGTH: {}", out.packet_length());
-        if out.channel() != 3 && out.channel() != 0 {
-            info!("R CHANNEL NUM: {}", 0);
-            info!("R SEQ NUM: {}", out.seq_num());
-            info!(
-                "R CHANNEL {} HAS {} BYTES AVAILABLE",
-                out.channel(),
-                out.data_length()
-            );
-        }
+        info!("R CHANNEL NUM: {}", 0);
+        info!("R SEQ NUM: {}", out.seq_num());
+        info!(
+            "R CHANNEL {} HAS {} BYTES AVAILABLE",
+            out.channel(),
+            out.data_length()
+        );
         self.seq_num_r[0 as usize] = out.seq_num();
 
         if out.packet_length() == 0 {
             info!("NO PACKET AVAILABLE");
         }
-        let mut spacer = [0u8; 2];
         self.i2c.read(self.address, out.as_mut_data(true)).ok();
 
         if out.channel() != 3 {
-            info!("FULL PACKET {:#X}", out.full_packet().as_slice());
+            info!("FULL PACKET DATA {:#X}", out.as_mut_data(true).len());
         }
         out
     }
@@ -118,13 +115,9 @@ where
             write.full_packet().as_slice()
         );
         let mut read = Packet::from_header(write.as_mut_header(), false);
-        println!("READ WHILE WRITING: {}", read.full_packet().as_slice());
+        println!("READ: {}", read.full_packet().as_slice());
         self.i2c
-            .write_read(
-                self.address,
-                write.full_packet().as_slice(),
-                read.as_mut_data(false),
-            )
+            .write(self.address, write.full_packet().as_slice())
             .ok();
         info!("PACKET SENT");
     }
@@ -139,17 +132,21 @@ where
         info!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
         self.send_packet(2, &buf_data);
+        // self.increment_seq_num(WRITE, 2, None);
 
         let mut retries = 0;
         // let max = 3;
         let mut out = Packet::new(true);
-        while out.channel() != 2 {
+        while out.channel() != 2
+            && out.report_id() != Register::Write(SH2Write::ProductIDRequest).addr()
+        {
             retries += 1;
             out = self.read_packet();
-            if out.channel() == 2 {
-                info!("{}", out.full_packet().as_mut_slice());
-                loop {}
-            }
+            info!(
+                "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
+                out.channel(),
+                out.report_id()
+            );
         }
 
         let product_id = ProductId::new(out.as_mut_data(false));

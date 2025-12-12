@@ -67,7 +67,7 @@ impl Packet {
             header: Vec::from_array([0; 4]),
             data: Vec::from_slice(buf).expect("Packet creation error"),
         };
-        temp.generate_header(buf);
+        temp.generate_header(buf, Some(seq_num));
         if channel < 6 {
             Ok(temp)
         } else {
@@ -75,14 +75,18 @@ impl Packet {
         }
     }
 
-    fn generate_header(&mut self, data_buf: &[u8]) {
+    fn generate_header(&mut self, data_buf: &[u8], seq_num: Option<u8>) {
         let length = data_buf.len() as u16 + 4;
         let length_slice: [u8; 2] = length.to_le_bytes();
         self.header[0] = length_slice[0];
         self.header[1] = length_slice[1];
         self.header[2] = self.channel;
-        self.seq_num = 0;
-        self.header[3] = self.seq_num;
+        if let Some(seq_num) = seq_num {
+            self.header[3] = seq_num;
+            self.seq_num = seq_num
+        } else {
+            self.header[3] = self.seq_num;
+        }
     }
 
     pub fn as_mut_header(&mut self) -> &mut [u8] {
@@ -96,14 +100,16 @@ impl Packet {
         if resize && !self.spacer {
             self.data.resize(self.data_length() as usize, 0);
         } else if resize && self.spacer {
-            self.data.resize(
-                (if self.data_length() < u16::MAX - 4 {
-                    self.data_length() + 4
-                } else {
-                    self.data_length()
-                }) as usize,
-                0,
-            );
+            self.data
+                .resize(
+                    (if self.data_length() < u16::MAX - 4 {
+                        self.data_length() + 4
+                    } else {
+                        self.data_length()
+                    }) as usize,
+                    0,
+                )
+                .ok();
         }
         self.channel = u8::from_le_bytes([self.header[2]]);
         self.seq_num = u8::from_le_bytes([self.header[3]]);
@@ -160,8 +166,10 @@ impl Packet {
     }
 
     pub fn report_id(&self) -> u8 {
-        if self.data_length() > 0 {
+        if self.data_length() > 0 && !self.spacer {
             self.data.get(0).unwrap_or(&0).clone()
+        } else if self.spacer && self.data_length() > 4 {
+            self.data.get(4).unwrap_or(&0).clone()
         } else {
             0
         }
