@@ -159,6 +159,62 @@ where
         }
     }
 
+    pub fn enable_quaternions(&mut self) -> bool {
+        info!("ENABLING QUATERNIONS");
+        // let mut buf_data = [
+        //     Register::Write(SH2Write::SetFeatureCommand).addr(),
+        //     Register::Report(ReportID::RotationVector).addr(),
+        // ];
+
+        // TODO Remove hardcoding and replace with constants
+        let mut buf_data = [
+            0xFD, 0x05, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00,
+        ];
+        self.send_packet(2, &buf_data);
+        let mut retries = 0;
+        let mut out = Packet::new(true);
+        while out.channel() != 2
+            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
+        {
+            retries += 1;
+            out = self.read_packet();
+            info!(
+                "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
+                out.channel(),
+                out.report_id()
+            );
+        }
+        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
+        info!("R PID {:#X}", out.full_packet().as_slice());
+        true
+    }
+
+    pub fn quaternions(&mut self) -> (u32, u32, u32, u32) {
+        info!("READING QUATERNIONS");
+        let mut buf_data = [
+            Register::Write(SH2Write::GetFeatureRequest).addr(),
+            Register::Report(ReportID::RotationVector).addr(),
+        ];
+        self.send_packet(2, &buf_data);
+        let mut retries = 0;
+        let mut out = Packet::new(true);
+        while out.channel() != 2
+            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
+        {
+            retries += 1;
+            out = self.read_packet();
+            info!(
+                "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
+                out.channel(),
+                out.report_id()
+            );
+        }
+        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
+        info!("R PID {:#X}", out.full_packet().as_slice());
+        (0, 0, 0, 0)
+    }
+
     fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) -> u8 {
         if channel < 6 {
             match read_write {
