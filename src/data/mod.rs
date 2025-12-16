@@ -23,7 +23,7 @@ impl Packet {
     }
 
     pub fn from_buf(buf: &[u8], spacer: bool) -> Self {
-        debug!("PACKET GEN IS starteed");
+        // debug!("PACKET GEN IS starteed");
         // let len = buf.len();
         // debug!("{}", len);
         let mut temp = Packet {
@@ -34,7 +34,7 @@ impl Packet {
             header: Vec::from_slice(&buf[..4]).expect("Packet creation error"),
             data: Vec::from_slice(buf.get(4..).unwrap_or(&[])).expect("Packet creation error"),
         };
-        info!("PACKET GEN IS FINE");
+        // info!("PACKET GEN IS FINE");
         temp.process_header(false);
         temp
     }
@@ -48,7 +48,7 @@ impl Packet {
             header: Vec::from_slice(&header[..4]).expect("Packet creation error"),
             data: Vec::new(),
         };
-        info!("PACKET GEN IS FINE");
+        // info!("PACKET GEN IS FINE");
         temp.process_header(true);
         temp
     }
@@ -94,7 +94,7 @@ impl Packet {
     }
 
     pub fn process_header(&mut self, resize: bool) {
-        info!("HEADER: {:#X}", self.header.as_slice());
+        // info!("HEADER: {:#X}", self.header.as_slice());
         self.calculate_length();
         // info!("LENGTH DATA: {}", self.length);
         if resize && !self.spacer {
