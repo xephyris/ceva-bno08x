@@ -300,35 +300,44 @@ where
             //     out.report_id()
             // );
         }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
+        info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         self.delay.delay_ms(2);
-        self.parse_quaternions(out)
+
+        if out.data_length() > 5 {
+            self.parse_quaternions(&out.as_mut_data(false)[5..])
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        }
         // info!("R PID {:#X}", out.full_packet().as_slice());
     }
 
-    fn parse_quaternions(&mut self, mut packet: Packet) -> (f32, f32, f32, f32) {
-        // if packet.data_length() == 23 {
-        let slice = packet.as_mut_data(false);
-        let i_slice: [u8; 2] = slice[7..9].try_into().expect("failed to capture slice");
-        let j_slice: [u8; 2] = slice[9..11].try_into().expect("failed to capture slice");
-        let k_slice: [u8; 2] = slice[11..13].try_into().expect("failed to capture slice");
-        let real_slice: [u8; 2] = slice[13..15].try_into().expect("failed to capture slice");
-        let i = u16::from_le_bytes(i_slice);
-        let j = u16::from_le_bytes(j_slice);
-        let k = u16::from_le_bytes(k_slice);
-        let real = u16::from_le_bytes(real_slice);
-        let total = (
-            i as f32 / 16384.0,
-            j as f32 / 16384.0,
-            k as f32 / 16384.0,
-            real as f32 / 16384.0,
-        );
-        // info!("{}", total);
-        total
-        // } else {
-        // (0, 0, 0, 0)
-        // }
+    fn parse_quaternions(&mut self, slice: &[u8]) -> (f32, f32, f32, f32) {
+        if slice.len() >= 13 && slice[0] == 0x05 {
+            let i_slice: [u8; 2] = slice[4..6].try_into().expect("failed to capture slice");
+            let j_slice: [u8; 2] = slice[6..8].try_into().expect("failed to capture slice");
+            let k_slice: [u8; 2] = slice[8..10].try_into().expect("failed to capture slice");
+            let real_slice: [u8; 2] = slice[10..12].try_into().expect("failed to capture slice");
+            let accuracy_slice: [u8; 2] =
+                slice[12..14].try_into().expect("failed to capture slice");
+            let i = u16::from_le_bytes(i_slice);
+            let j = u16::from_le_bytes(j_slice);
+            let k = u16::from_le_bytes(k_slice);
+            let real = u16::from_le_bytes(real_slice);
+            let _accuracy = u16::from_le_bytes(accuracy_slice);
+            let total = (
+                i as f32 / 16384.0,
+                j as f32 / 16384.0,
+                k as f32 / 16384.0,
+                real as f32 / 16384.0,
+            );
+            // info!("{}", total);
+            total
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        }
     }
+
+    fn parse_magnetometer() {}
 
     fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) -> u8 {
         if channel < 6 {
