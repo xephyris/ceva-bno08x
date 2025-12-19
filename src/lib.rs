@@ -12,10 +12,12 @@ use hal::spi::*;
 use defmt::*;
 
 use crate::data::{Packet, ProductId, VarBuf};
+use crate::parsing::get_report_length;
 use crate::register::*;
 
 pub mod data;
 pub mod error;
+mod parsing;
 mod register;
 
 const WRITE: bool = true;
@@ -300,18 +302,43 @@ where
             //     out.report_id()
             // );
         }
-        info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
+        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         self.delay.delay_ms(2);
 
         if out.data_length() > 5 {
-            self.parse_quaternions(&out.as_mut_data(false)[5..])
+            self.parse_sensor_report(out)
         } else {
             (0.0, 0.0, 0.0, 0.0)
         }
         // info!("R PID {:#X}", out.full_packet().as_slice());
     }
+    //0x05, 0x3e, 0x00, 0x00, 0x99, 0x05, 0xaa, 0xfd, 0xd1, 0xff, 0xb6, 0x3f, 0x44, 0x32, 0x03, 0x42, 0x00, 0x00, 0x00, 0x03, 0xa3, 0x00, 0xcf, 0xfc
+    fn parse_sensor_report(&mut self, mut out: Packet) -> (f32, f32, f32, f32) {
+        let mut data = out.as_mut_data(false);
+        let delay: &[u8] = &data[0..5];
+        let mut index = 5;
+        let max = data.len() / 15;
+        let mut attempts = 0;
+        while index < data.len() && attempts < max {
+            if let Some((id, length)) = get_report_length(data[index]) {
+                match id {
+                    ReportID::RotationVector => {
+                        let position =
+                            self.parse_quaternions(&data[index..(index + length as usize)]);
+                        info!("QUATERNIONS {}", position);
+                        return position;
+                    }
+                    _ => debug!("Unimplemented"),
+                }
+                index += length as usize;
+            }
+            attempts += 1;
+        }
+        return (0.0, 0.0, 0.0, 0.0);
+    }
 
     fn parse_quaternions(&mut self, slice: &[u8]) -> (f32, f32, f32, f32) {
+        info!("QUAT SLICE: {:#X}", slice);
         if slice.len() >= 13 && slice[0] == 0x05 {
             let i_slice: [u8; 2] = slice[4..6].try_into().expect("failed to capture slice");
             let j_slice: [u8; 2] = slice[6..8].try_into().expect("failed to capture slice");
@@ -319,11 +346,11 @@ where
             let real_slice: [u8; 2] = slice[10..12].try_into().expect("failed to capture slice");
             let accuracy_slice: [u8; 2] =
                 slice[12..14].try_into().expect("failed to capture slice");
-            let i = u16::from_le_bytes(i_slice);
-            let j = u16::from_le_bytes(j_slice);
-            let k = u16::from_le_bytes(k_slice);
-            let real = u16::from_le_bytes(real_slice);
-            let _accuracy = u16::from_le_bytes(accuracy_slice);
+            let i = i16::from_le_bytes(i_slice);
+            let j = i16::from_le_bytes(j_slice);
+            let k = i16::from_le_bytes(k_slice);
+            let real = i16::from_le_bytes(real_slice);
+            let _accuracy = i16::from_le_bytes(accuracy_slice);
             let total = (
                 i as f32 / 16384.0,
                 j as f32 / 16384.0,
