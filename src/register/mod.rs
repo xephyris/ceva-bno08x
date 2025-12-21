@@ -1,7 +1,7 @@
 // Refer to SH2-Reference-Manual
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ReportId {
     AccelerometerRaw = 0x14,        // Report Length 16

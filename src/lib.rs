@@ -14,12 +14,14 @@ use defmt::*;
 use crate::data::{Packet, ProductId, VarBuf};
 use crate::parsing::get_report_length;
 use crate::register::*;
+use crate::sensors::Sensors;
 
 mod config;
 pub mod data;
 pub mod error;
 mod parsing;
 mod register;
+mod sensors;
 
 const WRITE: bool = true;
 const READ: bool = false;
@@ -33,6 +35,7 @@ pub struct BNO08x<I2C, D> {
     delay: D,
     seq_num_w: [u8; 6],
     seq_num_r: [u8; 6],
+    sensors: Sensors,
 }
 
 impl<I2C, D> BNO08x<I2C, D>
@@ -51,6 +54,7 @@ where
             delay,
             seq_num_w: [0; 6],
             seq_num_r: [0; 6],
+            sensors: Sensors::new(),
         }
     }
 
@@ -324,10 +328,12 @@ where
             if let Some((id, length)) = get_report_length(data[index]) {
                 match id {
                     ReportId::RotationVector => {
-                        let position =
-                            self.parse_quaternions(&data[index..(index + length as usize)]);
-                        info!("QUATERNIONS {}", position);
-                        return position;
+                        // let position =
+                        //     self.parse_quaternions(&data[index..(index + length as usize)]);
+                        self.sensors
+                            .update_data(id, &data[index..(index + length as usize)]);
+                        info!("QUATERNIONS NEW {}", self.sensors.quaternions);
+                        return self.sensors.quaternions;
                     }
                     _ => debug!("Unimplemented"),
                 }
