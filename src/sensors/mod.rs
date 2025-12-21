@@ -1,4 +1,4 @@
-use defmt::debug;
+use defmt::*;
 
 use crate::{
     config::QUAT_SCALAR_Q_POINT,

@@ -329,9 +329,9 @@ where
                 match id {
                     ReportId::RotationVector => {
                         // let position =
-                        //     self.parse_quaternions(&data[index..(index + length as usize)]);
+                        // self.parse_quaternions(&data[index..(index + length as usize)]);
                         self.sensors
-                            .update_data(id, &data[index..(index + length as usize)]);
+                            .update_data(id, &data[(index + 4)..(index + length as usize)]);
                         info!("QUATERNIONS NEW {}", self.sensors.quaternions);
                         return self.sensors.quaternions;
                     }
