@@ -3,7 +3,7 @@
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
 #[repr(u8)]
-pub enum ReportID {
+pub enum ReportId {
     AccelerometerRaw = 0x14,        // Report Length 16
     AccelerometerCalibrated = 0x01, // Report Length 10
     AccelerationLinear = 0x04,      // Report Length 10
@@ -15,6 +15,7 @@ pub enum ReportID {
     MagFieldCalibrated = 0x03,      // Report Length 10
     MagFieldUncalibrated = 0x0F,    // Report Length 16
     RotationVector = 0x05,          // Report Length 14
+    GameRotationVector = 0x08,      // Report Length 12
     GeomagneticRotVector = 0x09,    // Report Length 14
     Pressure = 0x0A,                // Report Length 8
     AmbientLight = 0x0B,            // Report Length 8
@@ -37,12 +38,14 @@ pub enum ReportID {
     PocketDetector = 0x21,        // Report Length 6
     CircleDetector = 0x22,        // Report Length 6
     HeartRateMonitor = 0x23,      // Report Length 6
-    ARVRStabilizedVec = 0x28,     // Report Length 14
+    ARVRStabilizedRotVec = 0x28,  // Report Length 14
     ARVRStabilizedGameVec = 0x29, // Report Length 12
     GyroIntegratedRotVec = 0x2A,  // Report Length 14
     MotionRequest = 0x2B,         // Report Length 6
     OpticalFlow = 0x2C,           // Report Length 24
     DeadReckoning = 0x2D,         // Report Length 60
+    BaseTimestamp = 0xFB,         // Report Length 5
+    TimestampRebase = 0xFA,       // Report Length 5
 }
 
 #[allow(dead_code)]
@@ -55,16 +58,18 @@ pub enum Register {
 // Refer to datasheet 1.3
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum SH2Read {
-    GetFeatureResponse = 0xFC,
-    ProductIDResponse = 0xF8,
-    FrsWriteResponse = 0xF5,
-    FrsReadResponse = 0xF3,
-    CommandResponse = 0xF1,
+    ProductIDResponse = 0xF8, // Report Length 16
+    FrsReadResponse = 0xF3,   // Report length 16
+    CommandResponse = 0xF1,   // Report Length 16
+    // Error in SH-2 Reference Manual p. 39 lists GetFeatureResponse as a Write Report ID
+    GetFeatureResponse = 0xFC, // Report Length 17
 }
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum SH2Write {
     GetFeatureRequest = 0xFE,
@@ -72,6 +77,7 @@ pub enum SH2Write {
     ProductIDRequest = 0xF9,
     FrsWriteRequest = 0xF7,
     FrsWriteData = 0xF6,
+    FrsWriteResponse = 0xF5,
     FrsReadRequest = 0xF4,
     CommandRequest = 0xF2,
 }

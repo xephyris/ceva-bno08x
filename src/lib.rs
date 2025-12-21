@@ -15,6 +15,7 @@ use crate::data::{Packet, ProductId, VarBuf};
 use crate::parsing::get_report_length;
 use crate::register::*;
 
+mod config;
 pub mod data;
 pub mod error;
 mod parsing;
@@ -167,7 +168,7 @@ where
         // info!("ENABLING QUATERNIONS");
         // let mut buf_data = [
         //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportID::RotationVector).addr(),
+        //     Register::Report(ReportId::RotationVector).addr(),
         // ];
 
         // TODO Remove hardcoding and replace with constants
@@ -198,7 +199,7 @@ where
         // info!("ENABLING QUATERNIONS");
         // let mut buf_data = [
         //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportID::RotationVector).addr(),
+        //     Register::Report(ReportId::RotationVector).addr(),
         // ];
 
         // TODO Remove hardcoding and replace with constants
@@ -229,7 +230,7 @@ where
         // info!("ENABLING QUATERNIONS");
         // let mut buf_data = [
         //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportID::RotationVector).addr(),
+        //     Register::Report(ReportId::RotationVector).addr(),
         // ];
 
         // TODO Remove hardcoding and replace with constants
@@ -260,7 +261,7 @@ where
         // info!("ENABLING QUATERNIONS");
         // let mut buf_data = [
         //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportID::RotationVector).addr(),
+        //     Register::Report(ReportId::RotationVector).addr(),
         // ];
 
         // TODO Remove hardcoding and replace with constants
@@ -312,7 +313,7 @@ where
         }
         // info!("R PID {:#X}", out.full_packet().as_slice());
     }
-    //0x05, 0x3e, 0x00, 0x00, 0x99, 0x05, 0xaa, 0xfd, 0xd1, 0xff, 0xb6, 0x3f, 0x44, 0x32, 0x03, 0x42, 0x00, 0x00, 0x00, 0x03, 0xa3, 0x00, 0xcf, 0xfc
+
     fn parse_sensor_report(&mut self, mut out: Packet) -> (f32, f32, f32, f32) {
         let mut data = out.as_mut_data(false);
         let delay: &[u8] = &data[0..5];
@@ -322,7 +323,7 @@ where
         while index < data.len() && attempts < max {
             if let Some((id, length)) = get_report_length(data[index]) {
                 match id {
-                    ReportID::RotationVector => {
+                    ReportId::RotationVector => {
                         let position =
                             self.parse_quaternions(&data[index..(index + length as usize)]);
                         info!("QUATERNIONS {}", position);
