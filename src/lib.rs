@@ -108,10 +108,6 @@ where
         }
         self.i2c.read(self.address, out.as_mut_data(true)).ok();
 
-        if out.channel() != 3 {
-            // info!("FULL PACKET DATA {:#X}", out.as_mut_data(true).len());
-        }
-
         out
     }
 
@@ -126,6 +122,50 @@ where
         debug!("PACKET SENT");
     }
 
+    fn wait_for_packeet(
+        &mut self,
+        channel: u8,
+        report_id: Option<SH2Read>,
+        max: Option<u8>,
+    ) -> Packet {
+        let max_attempts = max.unwrap_or(0);
+
+        let mut out = Packet::new(true);
+        if max_attempts > 0 {
+            let mut retries = 0;
+            if let Some(report_id) = report_id {
+                while out.channel() != channel
+                    && out.report_id() != Register::Read(report_id).addr()
+                    && retries < max_attempts
+                {
+                    retries += 1;
+                    out = self.read_packet();
+                }
+            } else {
+                while out.channel() != channel && retries < max_attempts {
+                    retries += 1;
+                    out = self.read_packet();
+                }
+            }
+            // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
+        } else {
+            if let Some(report_id) = report_id {
+                while out.channel() != channel
+                    && out.report_id() != Register::Read(report_id).addr()
+                {
+                    out = self.read_packet();
+                }
+            } else {
+                while out.channel() != channel {
+                    out = self.read_packet();
+                }
+            }
+            // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
+        }
+
+        out
+    }
+
     pub fn read_product_id(&mut self) -> Result<bool, MyError> {
         debug!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
@@ -134,13 +174,7 @@ where
 
         let mut retries = 0;
         // let max = 3;
-        let mut out = Packet::new(true);
-        while out.channel() != 2
-            && out.report_id() != Register::Write(SH2Write::ProductIDRequest).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-        }
+        let mut out = self.wait_for_packeet(2, Some(SH2Read::ProductIDResponse), None);
 
         let product_id = ProductId::new(out.as_mut_data(false));
         // info!("{:?}", product_id.display());
@@ -203,26 +237,17 @@ where
 
     pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
         // info!("READING QUATERNIONS");
-        let mut retries = 0;
-        let mut out = Packet::new(true);
-        while out.channel() != 3
-            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-        }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         self.delay.delay_ms(2);
-
+        let mut out = self.wait_for_packeet(3, Some(SH2Read::GetFeatureResponse), None);
         if out.data_length() > 5 {
-            self.parse_sensor_report(out)
+            self.parse_sensor_report(out);
+            self.sensors.quaternions
         } else {
             (0.0, 0.0, 0.0, 0.0)
         }
-        // info!("R PID {:#X}", out.full_packet().as_slice());
     }
 
-    fn parse_sensor_report(&mut self, mut out: Packet) -> (f32, f32, f32, f32) {
+    fn parse_sensor_report(&mut self, mut out: Packet) {
         let mut data = out.as_mut_data(false);
         let timestamping: &[u8] = &data[0..5];
         let mut index = 5;
@@ -231,13 +256,17 @@ where
         while index < data.len() && attempts < max {
             if let Some((id, length)) = get_report_length(data[index]) {
                 match id {
+                    ReportId::AccelerometerCalibrated => {
+                        self.sensors
+                            .update_data(id, &data[(index + 4)..(index + length as usize)]);
+                        info!("ACCELERATION NEW {}", self.sensors.acceleration);
+                    }
                     ReportId::RotationVector => {
                         // let position =
                         // self.parse_quaternions(&data[index..(index + length as usize)]);
                         self.sensors
                             .update_data(id, &data[(index + 4)..(index + length as usize)]);
                         info!("QUATERNIONS NEW {}", self.sensors.quaternions);
-                        return self.sensors.quaternions;
                     }
                     _ => debug!("Unimplemented"),
                 }
@@ -245,37 +274,7 @@ where
             }
             attempts += 1;
         }
-        return (0.0, 0.0, 0.0, 0.0);
     }
-
-    fn parse_quaternions(&mut self, slice: &[u8]) -> (f32, f32, f32, f32) {
-        info!("QUAT SLICE: {:#X}", slice);
-        if slice.len() >= 13 && slice[0] == 0x05 {
-            let i_slice: [u8; 2] = slice[4..6].try_into().expect("failed to capture slice");
-            let j_slice: [u8; 2] = slice[6..8].try_into().expect("failed to capture slice");
-            let k_slice: [u8; 2] = slice[8..10].try_into().expect("failed to capture slice");
-            let real_slice: [u8; 2] = slice[10..12].try_into().expect("failed to capture slice");
-            let accuracy_slice: [u8; 2] =
-                slice[12..14].try_into().expect("failed to capture slice");
-            let i = i16::from_le_bytes(i_slice);
-            let j = i16::from_le_bytes(j_slice);
-            let k = i16::from_le_bytes(k_slice);
-            let real = i16::from_le_bytes(real_slice);
-            let _accuracy = i16::from_le_bytes(accuracy_slice);
-            let total = (
-                i as f32 / 16384.0,
-                j as f32 / 16384.0,
-                k as f32 / 16384.0,
-                real as f32 / 16384.0,
-            );
-            // info!("{}", total);
-            total
-        } else {
-            (0.0, 0.0, 0.0, 0.0)
-        }
-    }
-
-    fn parse_magnetometer() {}
 
     fn increment_seq_num(&mut self, read_write: bool, channel: u8, seq_num: Option<u8>) -> u8 {
         if channel < 6 {
