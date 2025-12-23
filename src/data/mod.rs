@@ -7,7 +7,7 @@ pub struct Packet {
     seq_num: u8,
     spacer: bool,
     header: heapless::Vec<u8, 4>,
-    data: heapless::Vec<u8, 32763>,
+    data: heapless::Vec<u8, 8191>,
 }
 
 impl Packet {

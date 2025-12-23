@@ -4,6 +4,7 @@ use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::i2c::I2c;
 use embedded_hal::{self as hal};
+use heapless::Vec;
 use panic_probe as _;
 
 use hal::digital::InputPin;
@@ -11,8 +12,9 @@ use hal::spi::*;
 
 use defmt::*;
 
+use crate::config::DEFAULT_REPORT_INTERVAL;
 use crate::data::{Packet, ProductId, VarBuf};
-use crate::parsing::get_report_length;
+use crate::parsing::{get_feature_dependencies, get_report_length};
 use crate::register::*;
 use crate::sensors::Sensors;
 
@@ -20,7 +22,7 @@ mod config;
 pub mod data;
 pub mod error;
 mod parsing;
-mod register;
+pub mod register;
 mod sensors;
 
 const WRITE: bool = true;
@@ -28,7 +30,6 @@ const READ: bool = false;
 const TIMEOUT: u32 = 2000000;
 
 // BAUD RATE MUST BE 100000 HZ AT 3MHZ SPI FREQUENCY!!!!!!
-#[derive(Debug)]
 pub struct BNO08x<I2C, D> {
     address: u8,
     i2c: I2C,
@@ -36,6 +37,7 @@ pub struct BNO08x<I2C, D> {
     seq_num_w: [u8; 6],
     seq_num_r: [u8; 6],
     sensors: Sensors,
+    features: Vec<ReportId, 42>,
 }
 
 impl<I2C, D> BNO08x<I2C, D>
@@ -55,16 +57,13 @@ where
             seq_num_w: [0; 6],
             seq_num_r: [0; 6],
             sensors: Sensors::new(),
+            features: Vec::new(),
         }
     }
 
     fn read_header(&mut self) -> Packet {
         let mut header = [0u8; 4];
         self.i2c.read(self.address, &mut header).ok();
-        // println!(
-        //     "RAW PACKET ************************ RAW PACKET \n HEADER: {}",
-        //     header
-        // );
 
         Packet::from_header(&header, true)
     }
@@ -119,12 +118,8 @@ where
     pub fn send_packet(&mut self, channel: u8, data: &[u8]) {
         let seq = self.increment_seq_num(WRITE, channel, None);
         let mut write = Packet::from_data_buf(data, channel, seq, false).expect("PacketGen failed");
+
         debug!("Packet Created");
-        // info!(
-        //     "SENDING PACKETS WITH CONTENTS {}",
-        //     write.full_packet().as_slice()
-        // );
-        // println!("READ: {}", read.full_packet().as_slice());
         self.i2c
             .write(self.address, write.full_packet().as_slice())
             .ok();
@@ -132,12 +127,6 @@ where
     }
 
     pub fn read_product_id(&mut self) -> Result<bool, MyError> {
-        // let mut buf = Packet::from_data_buf(
-        //     &[Register::Write(SH2Write::ProductIDRequest).addr(), 0x00],
-        //     2,
-        //     self.seq_num_w[2],
-        // )
-        // .expect("W Packet Channel Invalid");
         debug!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
         self.send_packet(2, &buf_data);
@@ -151,11 +140,6 @@ where
         {
             retries += 1;
             out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
         }
 
         let product_id = ProductId::new(out.as_mut_data(false));
@@ -168,128 +152,53 @@ where
         }
     }
 
-    pub fn enable_accelerometer(&mut self) -> bool {
-        // info!("ENABLING QUATERNIONS");
-        // let mut buf_data = [
-        //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportId::RotationVector).addr(),
-        // ];
+    pub fn enable_features(
+        &mut self,
+        feature_id: ReportId,
+        interval: Option<u32>,
+        sens_specific: Option<u32>,
+    ) {
+        // if !self.features.contains(&feature_id) {
+        let mut data_buffer = [0_u8; 17];
 
-        // TODO Remove hardcoding and replace with constants
-        let mut buf_data = [
-            0xFD, 0x01, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-        ];
-        self.send_packet(2, &buf_data);
-        let mut retries = 0;
-        let mut out = Packet::new(true);
-        while out.channel() != 2
-            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
+        if feature_id == ReportId::PersonalActClassifier {
+            debug!("Unimplemented");
+        } else {
+            data_buffer[0] = 0xFD;
+            data_buffer[1] = feature_id as u8;
+            data_buffer[5..9].copy_from_slice(&u32::to_le_bytes(
+                interval.unwrap_or(DEFAULT_REPORT_INTERVAL),
+            ));
+            data_buffer[13..17].copy_from_slice(&u32::to_le_bytes(sens_specific.unwrap_or(0)));
+
+            let deps = get_feature_dependencies(feature_id);
+            if deps.len() > 0 {
+                for dep in deps {
+                    if !self.features.contains(dep) {
+                        self.enable_features(*dep, None, None);
+                    }
+                }
+            }
+            warn!("ENABLE FEATURES OUTPUT: {}", &data_buffer);
+            self.send_packet(2, &data_buffer);
+
+            debug!("PACKET FAILED");
+            let mut retries = 0;
+            let mut out = Packet::new(true);
+            while out.channel() != 2
+                && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
+            {
+                info!(
+                    "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
+                    out.channel(),
+                    out.report_id()
+                );
+                retries += 1;
+                out = self.read_packet();
+            }
+            // self.features.push(feature_id).ok();
         }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
-        // info!("R PID {:#X}", out.full_packet().as_slice());
-        true
-    }
-
-    pub fn enable_gyroscrope(&mut self) -> bool {
-        // info!("ENABLING QUATERNIONS");
-        // let mut buf_data = [
-        //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportId::RotationVector).addr(),
-        // ];
-
-        // TODO Remove hardcoding and replace with constants
-        let mut buf_data = [
-            0xFD, 0x02, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-        ];
-        self.send_packet(2, &buf_data);
-        let mut retries = 0;
-        let mut out = Packet::new(true);
-        while out.channel() != 2
-            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
-        }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
-        // info!("R PID {:#X}", out.full_packet().as_slice());
-        true
-    }
-
-    pub fn enable_magnetometer(&mut self) -> bool {
-        // info!("ENABLING QUATERNIONS");
-        // let mut buf_data = [
-        //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportId::RotationVector).addr(),
-        // ];
-
-        // TODO Remove hardcoding and replace with constants
-        let mut buf_data = [
-            0xFD, 0x03, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-        ];
-        self.send_packet(2, &buf_data);
-        let mut retries = 0;
-        let mut out = Packet::new(true);
-        while out.channel() != 2
-            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
-        }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
-        // info!("R PID {:#X}", out.full_packet().as_slice());
-        true
-    }
-
-    pub fn enable_quaternions(&mut self) -> bool {
-        // info!("ENABLING QUATERNIONS");
-        // let mut buf_data = [
-        //     Register::Write(SH2Write::SetFeatureCommand).addr(),
-        //     Register::Report(ReportId::RotationVector).addr(),
-        // ];
-
-        // TODO Remove hardcoding and replace with constants
-        let mut buf_data = [
-            0xFD, 0x05, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-        ];
-        self.send_packet(2, &buf_data);
-        let mut retries = 0;
-        let mut out = Packet::new(true);
-        while out.channel() != 2
-            && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-        {
-            retries += 1;
-            out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
-        }
-        // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data());
-        // info!("R PID {:#X}", out.full_packet().as_slice());
-        true
+        // }
     }
 
     pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
@@ -301,11 +210,6 @@ where
         {
             retries += 1;
             out = self.read_packet();
-            // info!(
-            //     "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-            //     out.channel(),
-            //     out.report_id()
-            // );
         }
         // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         self.delay.delay_ms(2);
@@ -320,9 +224,9 @@ where
 
     fn parse_sensor_report(&mut self, mut out: Packet) -> (f32, f32, f32, f32) {
         let mut data = out.as_mut_data(false);
-        let delay: &[u8] = &data[0..5];
+        let timestamping: &[u8] = &data[0..5];
         let mut index = 5;
-        let max = data.len() / 15;
+        let max = data.len().checked_sub(15).unwrap_or(2);
         let mut attempts = 0;
         while index < data.len() && attempts < max {
             if let Some((id, length)) = get_report_length(data[index]) {

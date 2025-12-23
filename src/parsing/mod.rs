@@ -29,6 +29,15 @@ const REPORT_LENGTHS: &[(ReportId, u8)] = &[
     (ReportId::ShakeDetector, 6),
 ];
 
+const FEATURE_DEPENDENCIES: &[(ReportId, &[ReportId])] = &[
+    (
+        ReportId::AccelerometerRaw,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (ReportId::GyroscopeRaw, &[ReportId::GyroscopeCalibrated]),
+    (ReportId::MagnetometerRaw, &[ReportId::MagFieldCalibrated]),
+];
+
 pub enum DataVals {
     I16(i16),
     I32(i32),
@@ -346,6 +355,15 @@ pub fn process_buf(data_format: &[DataTypes], buf: &[u8]) -> Vec<DataVals, 20> {
         }
     }
     return output;
+}
+
+pub fn get_feature_dependencies(report_id: ReportId) -> &'static [ReportId] {
+    for (r_id, deps) in FEATURE_DEPENDENCIES {
+        if *r_id == report_id {
+            return deps;
+        }
+    }
+    &[]
 }
 
 pub fn get_control_report_length(report_id: u8) -> Option<(SH2Read, u8)> {
