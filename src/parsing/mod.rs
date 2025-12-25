@@ -3,30 +3,35 @@ use heapless::Vec;
 use crate::{data, register::*};
 
 const REPORT_LENGTHS: &[(ReportId, u8)] = &[
+    (ReportId::AccelerometerRaw, 16),
     (ReportId::AccelerometerCalibrated, 10),
     (ReportId::AccelerationLinear, 10),
     (ReportId::Gravity, 10),
-    (ReportId::AccelerometerRaw, 16),
+    (ReportId::GyroscopeRaw, 16),
     (ReportId::GyroscopeCalibrated, 10),
     (ReportId::GyroscopeUncalibrated, 16),
-    (ReportId::GyroscopeRaw, 16),
+    (ReportId::MagnetometerRaw, 16),
     (ReportId::MagFieldCalibrated, 10),
     (ReportId::MagFieldUncalibrated, 16),
-    (ReportId::MagnetometerRaw, 16),
-    (ReportId::GeomagneticRotVector, 14),
-    (ReportId::GameRotationVector, 12),
-    (ReportId::ARVRStabilizedGameVec, 12),
     (ReportId::RotationVector, 14),
-    (ReportId::ARVRStabilizedRotVec, 14),
-    (ReportId::GyroIntegratedRotVec, 14),
-    (ReportId::StabilityClassifier, 6),
-    (ReportId::StabilityDetector, 6),
+    (ReportId::GameRotationVector, 12),
+    (ReportId::GeomagneticRotVector, 14),
     (ReportId::TapDetector, 5),
     (ReportId::StepDetector, 8),
     (ReportId::StepCounter, 12),
-    (ReportId::PersonalActClassifier, 16),
     (ReportId::SignificantMotion, 6),
+    (ReportId::StabilityClassifier, 6),
     (ReportId::ShakeDetector, 6),
+    (ReportId::FlipDetector, 6),
+    (ReportId::PickupDetector, 6),
+    (ReportId::StabilityDetector, 6),
+    (ReportId::PersonalActClassifier, 16),
+    (ReportId::SleepDetector, 6),
+    (ReportId::TiltDetector, 6),
+    (ReportId::CircleDetector, 6),
+    (ReportId::ARVRStabilizedRotVec, 14),
+    (ReportId::ARVRStabilizedGameVec, 12),
+    (ReportId::GyroIntegratedRotVec, 14),
 ];
 
 const FEATURE_DEPENDENCIES: &[(ReportId, &[ReportId])] = &[
@@ -34,8 +39,120 @@ const FEATURE_DEPENDENCIES: &[(ReportId, &[ReportId])] = &[
         ReportId::AccelerometerRaw,
         &[ReportId::AccelerometerCalibrated],
     ),
+    (
+        ReportId::AccelerationLinear,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (ReportId::Gravity, &[ReportId::AccelerometerCalibrated]),
+    (
+        ReportId::GyroscopeCalibrated,
+        &[ReportId::AccelerometerCalibrated],
+    ),
     (ReportId::GyroscopeRaw, &[ReportId::GyroscopeCalibrated]),
+    (
+        ReportId::GyroscopeUncalibrated,
+        &[
+            ReportId::GyroscopeCalibrated,
+            ReportId::AccelerometerCalibrated,
+        ],
+    ),
     (ReportId::MagnetometerRaw, &[ReportId::MagFieldCalibrated]),
+    (
+        ReportId::MagFieldCalibrated,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::MagFieldUncalibrated,
+        &[
+            ReportId::MagFieldCalibrated,
+            ReportId::AccelerometerCalibrated,
+        ],
+    ),
+    (
+        ReportId::RotationVector,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+            ReportId::MagFieldCalibrated,
+        ],
+    ),
+    (
+        ReportId::GameRotationVector,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+        ],
+    ),
+    (
+        ReportId::GeomagneticRotVector,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::MagFieldCalibrated,
+        ],
+    ),
+    (ReportId::TapDetector, &[ReportId::AccelerometerCalibrated]),
+    (ReportId::StepDetector, &[ReportId::AccelerometerCalibrated]),
+    (ReportId::StepCounter, &[ReportId::AccelerometerCalibrated]),
+    (
+        ReportId::SignificantMotion,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::StabilityClassifier,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+        ],
+    ),
+    (
+        ReportId::ShakeDetector,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (ReportId::FlipDetector, &[ReportId::AccelerometerCalibrated]),
+    (
+        ReportId::PickupDetector,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::StabilityDetector,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::PersonalActClassifier,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::SleepDetector,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (ReportId::TiltDetector, &[ReportId::AccelerometerCalibrated]),
+    (
+        ReportId::CircleDetector,
+        &[ReportId::AccelerometerCalibrated],
+    ),
+    (
+        ReportId::ARVRStabilizedRotVec,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+            ReportId::MagFieldCalibrated,
+        ],
+    ),
+    (
+        ReportId::ARVRStabilizedGameVec,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+        ],
+    ),
+    (
+        ReportId::GyroIntegratedRotVec,
+        &[
+            ReportId::AccelerometerCalibrated,
+            ReportId::GyroscopeCalibrated,
+            ReportId::MagFieldCalibrated,
+        ],
+    ),
 ];
 
 pub enum DataVals {

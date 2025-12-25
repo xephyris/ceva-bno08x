@@ -127,7 +127,7 @@ where
         channel: u8,
         report_id: Option<SH2Read>,
         max: Option<u8>,
-    ) -> Packet {
+    ) -> Result<Packet, SensorError> {
         let max_attempts = max.unwrap_or(0);
 
         let mut out = Packet::new(true);
@@ -141,10 +141,19 @@ where
                     retries += 1;
                     out = self.read_packet();
                 }
+                if retries == max_attempts
+                    && out.channel() != channel
+                    && out.report_id() != Register::Read(report_id).addr()
+                {
+                    return Err(SensorError::PacketRetrievalFailed);
+                }
             } else {
                 while out.channel() != channel && retries < max_attempts {
                     retries += 1;
                     out = self.read_packet();
+                }
+                if retries == max_attempts && out.channel() != channel {
+                    return Err(SensorError::PacketRetrievalFailed);
                 }
             }
             // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
@@ -160,13 +169,12 @@ where
                     out = self.read_packet();
                 }
             }
-            // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         }
 
-        out
+        Ok(out)
     }
 
-    pub fn read_product_id(&mut self) -> Result<bool, MyError> {
+    pub fn read_product_id(&mut self) -> Result<bool, SensorError> {
         debug!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
         self.send_packet(2, &buf_data);
@@ -174,15 +182,20 @@ where
 
         let mut retries = 0;
         // let max = 3;
+
         let mut out = self.wait_for_packet(2, Some(SH2Read::ProductIDResponse), None);
 
-        let product_id = ProductId::new(out.as_mut_data(false));
-        // info!("{:?}", product_id.display());
+        if let Ok(mut out) = out {
+            let product_id = ProductId::new(out.as_mut_data(false));
+            // info!("{:?}", product_id.display());
 
-        if product_id.display().0 != (0, 0) {
-            Ok(true)
+            if product_id.display().0 != (0, 0) {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         } else {
-            Ok(false)
+            Err(SensorError::PacketRetrievalFailed)
         }
     }
 
@@ -192,55 +205,54 @@ where
         interval: Option<u32>,
         sens_specific: Option<u32>,
     ) {
-        // if !self.features.contains(&feature_id) {
-        let mut data_buffer = [0_u8; 17];
+        if !self.features.contains(&feature_id) {
+            let mut data_buffer = [0_u8; 17];
 
-        if feature_id == ReportId::PersonalActClassifier {
-            debug!("Unimplemented");
-        } else {
-            data_buffer[0] = 0xFD;
-            data_buffer[1] = feature_id as u8;
-            data_buffer[5..9].copy_from_slice(&u32::to_le_bytes(
-                interval.unwrap_or(DEFAULT_REPORT_INTERVAL),
-            ));
-            data_buffer[13..17].copy_from_slice(&u32::to_le_bytes(sens_specific.unwrap_or(0)));
+            if feature_id == ReportId::PersonalActClassifier {
+                debug!("Unimplemented");
+            } else {
+                data_buffer[0] = 0xFD;
+                data_buffer[1] = feature_id as u8;
+                data_buffer[5..9].copy_from_slice(&u32::to_le_bytes(
+                    interval.unwrap_or(DEFAULT_REPORT_INTERVAL),
+                ));
+                data_buffer[13..17].copy_from_slice(&u32::to_le_bytes(sens_specific.unwrap_or(0)));
 
-            let deps = get_feature_dependencies(feature_id);
-            if deps.len() > 0 {
-                for dep in deps {
-                    if !self.features.contains(dep) {
-                        self.enable_features(*dep, None, None);
+                let deps = get_feature_dependencies(feature_id);
+                warn!("ENABLING DEPS: {:?}", deps);
+                if deps.len() > 0 {
+                    for dep in deps {
+                        if !self.features.contains(dep) {
+                            self.enable_features(*dep, None, None);
+                        }
                     }
                 }
-            }
-            warn!("ENABLE FEATURES OUTPUT: {}", &data_buffer);
-            self.send_packet(2, &data_buffer);
+                warn!("ENABLE FEATURES OUTPUT: {}", &data_buffer);
+                self.send_packet(2, &data_buffer);
 
-            debug!("PACKET FAILED");
-            let mut retries = 0;
-            let mut out = Packet::new(true);
-            while out.channel() != 2
-                && out.report_id() != Register::Read(SH2Read::GetFeatureResponse).addr()
-            {
-                info!(
-                    "OUT CHANNEL IS {} \n OUT REPORT ID IS {:#X}",
-                    out.channel(),
-                    out.report_id()
-                );
-                retries += 1;
-                out = self.read_packet();
+                let mut retries = 0;
+                let mut out = Packet::new(true);
+                if let Ok(out) =
+                    self.wait_for_packet(2, Some(SH2Read::GetFeatureResponse), Some(10))
+                {
+                    self.features.push(feature_id).ok();
+                    warn!("FEATURE ENABLED");
+                } else {
+                    warn!("FAILED TO ENABLE FEATURE {}", feature_id);
+                }
             }
-            // self.features.push(feature_id).ok();
         }
-        // }
     }
 
     pub fn update_sensors(&mut self) -> bool {
         self.delay.delay_ms(2);
-        let mut out = self.wait_for_packet(3, Some(SH2Read::GetFeatureResponse), None);
-        if out.data_length() > 5 {
-            self.parse_sensor_report(out);
-            true
+        if let Ok(mut out) = self.wait_for_packet(3, Some(SH2Read::GetFeatureResponse), None) {
+            if out.data_length() > 5 {
+                self.parse_sensor_report(out);
+                true
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -309,6 +321,8 @@ where
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum MyError {
+pub enum SensorError {
     Placeholder, // Add other errors for your driver here.
+    Unimplemented,
+    PacketRetrievalFailed,
 }
