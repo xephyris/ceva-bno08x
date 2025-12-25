@@ -10,6 +10,8 @@ use crate::{
 pub struct Sensors {
     pub quaternions: (f32, f32, f32, f32),
     pub acceleration: (f32, f32, f32), // Calibrated
+    pub gyroscope: (f32, f32, f32),    // Calibrated
+    pub magnetometer: (f32, f32, f32), // Calibrated Mag Field
 }
 
 impl Sensors {
@@ -17,6 +19,8 @@ impl Sensors {
         Sensors {
             quaternions: (0.0, 0.0, 0.0, 0.0),
             acceleration: (0.0, 0.0, 0.0),
+            gyroscope: (0.0, 0.0, 0.0),
+            magnetometer: (0.0, 0.0, 0.0),
         }
     }
 
@@ -35,17 +39,46 @@ impl Sensors {
                                         q_point_processing(*num, ACCEL_SCALAR_Q_POINT)
                                 }
                             }
-                            crate::parsing::DataVals::U32(accuracy) => {
-                                if index == 4 {
-                                    debug!("Quaternion processing accuracy: {}", accuracy);
-                                }
-                            }
                             _ => {}
                         }
                     }
                     self.acceleration.0 = accel_vals[0];
                     self.acceleration.1 = accel_vals[1];
                     self.acceleration.2 = accel_vals[2];
+                }
+                ReportId::GyroscopeCalibrated => {
+                    let out = process_buf(data_format, buf_slice);
+                    let mut gyro_vals = [0.0_f32; 3];
+                    for (index, data_val) in out.iter().enumerate() {
+                        match data_val {
+                            crate::parsing::DataVals::I16(num) => {
+                                if index < 3 {
+                                    gyro_vals[index] = q_point_processing(*num, GYRO_SCALAR_Q_POINT)
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.gyroscope.0 = gyro_vals[0];
+                    self.gyroscope.1 = gyro_vals[1];
+                    self.gyroscope.2 = gyro_vals[2];
+                }
+                ReportId::MagFieldCalibrated => {
+                    let out = process_buf(data_format, buf_slice);
+                    let mut mag_vals = [0.0_f32; 3];
+                    for (index, data_val) in out.iter().enumerate() {
+                        match data_val {
+                            crate::parsing::DataVals::I16(num) => {
+                                if index < 3 {
+                                    mag_vals[index] = q_point_processing(*num, GYRO_SCALAR_Q_POINT)
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.magnetometer.0 = mag_vals[0];
+                    self.magnetometer.1 = mag_vals[1];
+                    self.magnetometer.2 = mag_vals[2];
                 }
                 ReportId::RotationVector => {
                     let out = process_buf(data_format, buf_slice);

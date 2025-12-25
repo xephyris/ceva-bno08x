@@ -122,7 +122,7 @@ where
         debug!("PACKET SENT");
     }
 
-    fn wait_for_packeet(
+    fn wait_for_packet(
         &mut self,
         channel: u8,
         report_id: Option<SH2Read>,
@@ -174,7 +174,7 @@ where
 
         let mut retries = 0;
         // let max = 3;
-        let mut out = self.wait_for_packeet(2, Some(SH2Read::ProductIDResponse), None);
+        let mut out = self.wait_for_packet(2, Some(SH2Read::ProductIDResponse), None);
 
         let product_id = ProductId::new(out.as_mut_data(false));
         // info!("{:?}", product_id.display());
@@ -235,16 +235,36 @@ where
         // }
     }
 
-    pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
-        // info!("READING QUATERNIONS");
+    pub fn update_sensors(&mut self) -> bool {
         self.delay.delay_ms(2);
-        let mut out = self.wait_for_packeet(3, Some(SH2Read::GetFeatureResponse), None);
+        let mut out = self.wait_for_packet(3, Some(SH2Read::GetFeatureResponse), None);
         if out.data_length() > 5 {
             self.parse_sensor_report(out);
-            self.sensors.quaternions
+            true
         } else {
-            (0.0, 0.0, 0.0, 0.0)
+            false
         }
+    }
+
+    pub fn accelerometer(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.acceleration
+    }
+
+    pub fn gyroscope(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.gyroscope
+    }
+
+    pub fn magnetometer(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.magnetometer
+    }
+
+    pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
+        // info!("READING QUATERNIONS");
+        self.update_sensors();
+        self.sensors.quaternions
     }
 
     fn parse_sensor_report(&mut self, mut out: Packet) {
@@ -255,21 +275,8 @@ where
         let mut attempts = 0;
         while index < data.len() && attempts < max {
             if let Some((id, length)) = get_report_length(data[index]) {
-                match id {
-                    ReportId::AccelerometerCalibrated => {
-                        self.sensors
-                            .update_data(id, &data[(index + 4)..(index + length as usize)]);
-                        info!("ACCELERATION NEW {}", self.sensors.acceleration);
-                    }
-                    ReportId::RotationVector => {
-                        // let position =
-                        // self.parse_quaternions(&data[index..(index + length as usize)]);
-                        self.sensors
-                            .update_data(id, &data[(index + 4)..(index + length as usize)]);
-                        info!("QUATERNIONS NEW {}", self.sensors.quaternions);
-                    }
-                    _ => debug!("Unimplemented"),
-                }
+                self.sensors
+                    .update_data(id, &data[(index + 4)..(index + length as usize)]);
                 index += length as usize;
             }
             attempts += 1;
