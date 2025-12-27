@@ -1,3 +1,4 @@
+use defmt::Format;
 use heapless::Vec;
 
 use crate::{data, register::*};
@@ -155,6 +156,7 @@ const FEATURE_DEPENDENCIES: &[(ReportId, &[ReportId])] = &[
     ),
 ];
 
+#[derive(Format)]
 pub enum DataVals {
     I16(i16),
     I32(i32),
@@ -224,9 +226,9 @@ const REPORT_VALS: &[(ReportId, &[DataTypes])] = &[
     (
         ReportId::AccelerometerRaw,
         &[
-            DataTypes::I16, // X
-            DataTypes::I16, // Y
-            DataTypes::I16, // Z
+            DataTypes::U16, // X
+            DataTypes::U16, // Y
+            DataTypes::U16, // Z
             DataTypes::Reserved,
             DataTypes::Reserved,
             DataTypes::U32, // Timestamp
@@ -254,10 +256,10 @@ const REPORT_VALS: &[(ReportId, &[DataTypes])] = &[
     (
         ReportId::GyroscopeRaw,
         &[
-            DataTypes::I16, // X
-            DataTypes::I16, // Y
-            DataTypes::I16, // Z
-            DataTypes::I16, // Gyro Temp
+            DataTypes::U16, // X
+            DataTypes::U16, // Y
+            DataTypes::U16, // Z
+            DataTypes::U16, // Gyro Temp
             DataTypes::U32, // Timestamp
         ],
     ),
@@ -283,9 +285,9 @@ const REPORT_VALS: &[(ReportId, &[DataTypes])] = &[
     (
         ReportId::MagnetometerRaw,
         &[
-            DataTypes::I16, // X
-            DataTypes::I16, // Y
-            DataTypes::I16, // Z
+            DataTypes::U16, // X
+            DataTypes::U16, // Y
+            DataTypes::U16, // Z
             DataTypes::Reserved,
             DataTypes::Reserved,
             DataTypes::U32, // Timestamp

@@ -258,27 +258,6 @@ where
         }
     }
 
-    pub fn accelerometer(&mut self) -> (f32, f32, f32) {
-        self.update_sensors();
-        self.sensors.acceleration
-    }
-
-    pub fn gyroscope(&mut self) -> (f32, f32, f32) {
-        self.update_sensors();
-        self.sensors.gyroscope
-    }
-
-    pub fn magnetometer(&mut self) -> (f32, f32, f32) {
-        self.update_sensors();
-        self.sensors.magnetometer
-    }
-
-    pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
-        // info!("READING QUATERNIONS");
-        self.update_sensors();
-        self.sensors.quaternions
-    }
-
     fn parse_sensor_report(&mut self, mut out: Packet) {
         let mut data = out.as_mut_data(false);
         let timestamping: &[u8] = &data[0..5];
@@ -317,6 +296,48 @@ where
         } else {
             0
         }
+    }
+}
+
+impl<I2C, D> BNO08x<I2C, D>
+where
+    I2C: I2c,
+    D: DelayNs,
+{
+    pub fn accelerometer(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.acceleration
+    }
+
+    pub fn gyroscope(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.gyroscope
+    }
+
+    pub fn raw_gyroscope(&mut self) -> (u16, u16, u16, u16, u32) {
+        self.update_sensors();
+        self.sensors.gyro_raw
+    }
+
+    pub fn magnetometer(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.magnetometer
+    }
+
+    pub fn linear_acceleration(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.linear_accel
+    }
+
+    pub fn gravity(&mut self) -> (f32, f32, f32) {
+        self.update_sensors();
+        self.sensors.gravity
+    }
+
+    pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
+        // info!("READING QUATERNIONS");
+        self.update_sensors();
+        self.sensors.quaternions
     }
 }
 
