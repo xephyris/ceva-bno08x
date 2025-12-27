@@ -266,8 +266,11 @@ where
         let mut attempts = 0;
         while index < data.len() && attempts < max {
             if let Some((id, length)) = get_report_length(data[index]) {
-                self.sensors
-                    .update_data(id, &data[(index + 4)..(index + length as usize)]);
+                self.sensors.update_data(
+                    id,
+                    &data[(index + 4)..(index + length as usize)],
+                    &data[(index)..(index + 4)],
+                );
                 index += length as usize;
             }
             attempts += 1;
@@ -304,37 +307,37 @@ where
     I2C: I2c,
     D: DelayNs,
 {
-    pub fn accelerometer(&mut self) -> (f32, f32, f32) {
+    pub fn accelerometer(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.acceleration
     }
 
-    pub fn gyroscope(&mut self) -> (f32, f32, f32) {
+    pub fn gyroscope(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.gyroscope
     }
 
-    pub fn raw_gyroscope(&mut self) -> (u16, u16, u16, u16, u32) {
+    pub fn raw_gyroscope(&mut self) -> (Status, u16, u16, u16, u16, u32) {
         self.update_sensors();
         self.sensors.gyro_raw
     }
 
-    pub fn magnetometer(&mut self) -> (f32, f32, f32) {
+    pub fn magnetometer(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.magnetometer
     }
 
-    pub fn linear_acceleration(&mut self) -> (f32, f32, f32) {
+    pub fn linear_acceleration(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.linear_accel
     }
 
-    pub fn gravity(&mut self) -> (f32, f32, f32) {
+    pub fn gravity(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.gravity
     }
 
-    pub fn quaternions(&mut self) -> (f32, f32, f32, f32) {
+    pub fn quaternions(&mut self) -> (Status, f32, f32, f32, f32) {
         // info!("READING QUATERNIONS");
         self.update_sensors();
         self.sensors.quaternions

@@ -52,6 +52,29 @@ pub enum ReportId {
 
 #[allow(dead_code)]
 #[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub enum Status {
+    Unreliable = 0,
+    LowAccuracy = 1,
+    MediumAccuracy = 2,
+    HighAccuracy = 3,
+    Unknown,
+}
+
+impl Format for Status {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            Status::Unreliable => defmt::write!(fmt, "Unreliable"),
+            Status::LowAccuracy => defmt::write!(fmt, "Low Accuracy"),
+            Status::MediumAccuracy => defmt::write!(fmt, "Medium Accuracy"),
+            Status::HighAccuracy => defmt::write!(fmt, "High Accuracy"),
+            Status::Unknown => defmt::write!(fmt, "Unknown"),
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[repr(u8)]
 pub enum Register {
     Read(SH2Read),
     Write(SH2Write),
