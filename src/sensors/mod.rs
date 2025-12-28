@@ -8,11 +8,13 @@ use crate::{
 #[derive(Debug)]
 pub struct Sensors {
     pub acceleration: (Status, f32, f32, f32), // Calibrated
+    pub accel_raw: (Status, u16, u16, u16, u32),
     pub linear_accel: (Status, f32, f32, f32),
     pub gravity: (Status, f32, f32, f32),
     pub gyroscope: (Status, f32, f32, f32), // Calibrated
     pub gyro_raw: (Status, u16, u16, u16, u16, u32),
     pub magnetometer: (Status, f32, f32, f32), // Calibrated Mag Field
+    pub mag_raw: (Status, u16, u16, u16, u32),
     pub quaternions: (Status, f32, f32, f32, f32),
     pub game_quaternions: (Status, f32, f32, f32, f32),
     pub geomag_quaternions: (Status, f32, f32, f32, f32),
@@ -22,11 +24,13 @@ impl Sensors {
     pub fn new() -> Sensors {
         Sensors {
             acceleration: (Status::Unknown, 0.0, 0.0, 0.0),
+            accel_raw: (Status::Unknown, 0, 0, 0, 0),
             linear_accel: (Status::Unknown, 0.0, 0.0, 0.0),
             gravity: (Status::Unknown, 0.0, 0.0, 0.0),
             gyroscope: (Status::Unknown, 0.0, 0.0, 0.0),
             gyro_raw: (Status::Unknown, 0, 0, 0, 0, 0),
             magnetometer: (Status::Unknown, 0.0, 0.0, 0.0),
+            mag_raw: (Status::Unknown, 0, 0, 0, 0),
             quaternions: (Status::Unknown, 0.0, 0.0, 0.0, 0.0),
             game_quaternions: (Status::Unknown, 0.0, 0.0, 0.0, 0.0),
             geomag_quaternions: (Status::Unknown, 0.0, 0.0, 0.0, 0.0),
@@ -56,6 +60,30 @@ impl Sensors {
                     self.acceleration.1 = accel_vals[0];
                     self.acceleration.2 = accel_vals[1];
                     self.acceleration.3 = accel_vals[2];
+                }
+                ReportId::AccelerometerRaw => {
+                    let out = process_buf(data_format, data_slice);
+                    let mut accel_vals = [0_u32; 4];
+                    for (index, data_val) in out.iter().enumerate() {
+                        match data_val {
+                            crate::parsing::DataVals::U16(num) => {
+                                if index < 3 {
+                                    accel_vals[index] = *num as u32;
+                                }
+                            }
+                            crate::parsing::DataVals::U32(timestamp) => {
+                                if index == 3 {
+                                    accel_vals[3] = *timestamp;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.accel_raw.0 = status;
+                    self.accel_raw.1 = accel_vals[0] as u16;
+                    self.accel_raw.2 = accel_vals[1] as u16;
+                    self.accel_raw.3 = accel_vals[2] as u16;
+                    self.accel_raw.4 = accel_vals[3];
                 }
                 ReportId::AccelerationLinear => {
                     let out = process_buf(data_format, data_slice);
@@ -153,6 +181,30 @@ impl Sensors {
                     self.magnetometer.1 = mag_vals[0];
                     self.magnetometer.2 = mag_vals[1];
                     self.magnetometer.3 = mag_vals[2];
+                }
+                ReportId::MagnetometerRaw => {
+                    let out = process_buf(data_format, data_slice);
+                    let mut mag_vals = [0_u32; 4];
+                    for (index, data_val) in out.iter().enumerate() {
+                        match data_val {
+                            crate::parsing::DataVals::U16(num) => {
+                                if index < 3 {
+                                    mag_vals[index] = *num as u32;
+                                }
+                            }
+                            crate::parsing::DataVals::U32(timestamp) => {
+                                if index == 3 {
+                                    mag_vals[3] = *timestamp;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.mag_raw.0 = status;
+                    self.mag_raw.1 = mag_vals[0] as u16;
+                    self.mag_raw.2 = mag_vals[1] as u16;
+                    self.mag_raw.3 = mag_vals[2] as u16;
+                    self.mag_raw.4 = mag_vals[3];
                 }
                 ReportId::RotationVector => {
                     let out = process_buf(data_format, data_slice);

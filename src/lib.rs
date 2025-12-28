@@ -312,6 +312,11 @@ where
         self.sensors.acceleration
     }
 
+    pub fn raw_accelerometer(&mut self) -> (Status, u16, u16, u16, u32) {
+        self.update_sensors();
+        self.sensors.accel_raw
+    }
+
     pub fn gyroscope(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.gyroscope
@@ -325,6 +330,11 @@ where
     pub fn magnetometer(&mut self) -> (Status, f32, f32, f32) {
         self.update_sensors();
         self.sensors.magnetometer
+    }
+
+    pub fn raw_magnetomter(&mut self) -> (Status, u16, u16, u16, u32) {
+        self.update_sensors();
+        self.sensors.mag_raw
     }
 
     pub fn linear_acceleration(&mut self) -> (Status, f32, f32, f32) {
