@@ -14,6 +14,7 @@ use defmt::*;
 
 use crate::config::DEFAULT_REPORT_INTERVAL;
 use crate::data::{Packet, ProductId, VarBuf};
+use crate::frs::FRSData;
 use crate::parsing::{get_feature_dependencies, get_report_length};
 use crate::register::*;
 use crate::sensors::Sensors;
@@ -21,6 +22,7 @@ use crate::sensors::Sensors;
 mod config;
 pub mod data;
 pub mod error;
+mod frs;
 mod parsing;
 pub mod register;
 mod sensors;
@@ -134,8 +136,8 @@ where
         if max_attempts > 0 {
             let mut retries = 0;
             if let Some(report_id) = report_id {
-                while out.channel() != channel
-                    && out.report_id() != Register::Read(report_id).addr()
+                while !(out.channel() == channel
+                    && out.report_id() == Register::Read(report_id).addr())
                     && retries < max_attempts
                 {
                     retries += 1;
@@ -145,6 +147,10 @@ where
                     && out.channel() != channel
                     && out.report_id() != Register::Read(report_id).addr()
                 {
+                    warn!(
+                        "Failed to fetch packet in time with report id {}",
+                        Register::Read(report_id).addr()
+                    );
                     return Err(SensorError::PacketRetrievalFailed);
                 }
             } else {
@@ -159,8 +165,8 @@ where
             // info!("FEATURE REQUEST RESPONSE: {:#X}", out.as_mut_data(true));
         } else {
             if let Some(report_id) = report_id {
-                while out.channel() != channel
-                    && out.report_id() != Register::Read(report_id).addr()
+                while !(out.channel() == channel
+                    && out.report_id() == Register::Read(report_id).addr())
                 {
                     out = self.read_packet();
                 }
@@ -246,7 +252,7 @@ where
 
     pub fn update_sensors(&mut self) -> bool {
         self.delay.delay_ms(2);
-        if let Ok(mut out) = self.wait_for_packet(3, Some(SH2Read::GetFeatureResponse), None) {
+        if let Ok(mut out) = self.wait_for_packet(3, Some(SH2Read::GetFeatureResponse), Some(10)) {
             if out.data_length() > 5 {
                 self.parse_sensor_report(out);
                 true
@@ -298,6 +304,30 @@ where
             }
         } else {
             0
+        }
+    }
+
+    pub fn frs_read(&mut self, record_id: FRSConfiguration) {
+        let mut frs_data = FRSData::new_read(record_id);
+        let mut write = Packet::from_data_buf(
+            &frs_data.generate_read_request().ok().unwrap(),
+            2,
+            self.seq_num_w[1],
+            false,
+        )
+        .expect("Failed to generate Packet for FRS READ");
+
+        self.send_packet(2, write.full_packet().as_slice());
+        println!("LOOKING FOR PACKET");
+        let packet = self.wait_for_packet(2, Some(SH2Read::FrsReadResponse), Some(10));
+        println!("FETCH COMPLETE");
+        if let Ok(mut packet) = packet {
+            println!("FULL PACKET :{}", packet.full_packet().as_slice());
+            println!("WITH SPACER: {}", packet.as_mut_data(true));
+            frs_data
+                .process_read_response(packet.as_mut_data(false))
+                .expect("failed to parse FRS Response");
+            dbg!("FRS RESPONSE : {:?}", frs_data);
         }
     }
 }
@@ -359,4 +389,6 @@ pub enum SensorError {
     Placeholder, // Add other errors for your driver here.
     Unimplemented,
     PacketRetrievalFailed,
+    ReadWriteFlipped,
+    InvalidLength,
 }

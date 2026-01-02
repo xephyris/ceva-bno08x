@@ -115,11 +115,78 @@ pub enum I2CAddress {
 
 #[allow(dead_code)]
 #[repr(u16)]
-pub enum Configuration {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FRSConfiguration {
     AgmStaticCalibration = 0x7979,
     AgmNominalCalibration = 0x4D4D,
     SraStaticCalibration = 0x8A8A,
     SraNominalCalibration = 0x4E4E,
+    DynamicCalibration = 0x1F1F,
+    MotionEnginePWRMGMT = 0xD3E2,
+    SystemOrientation = 0x2D3E,
+    PrimaryAccelerometerOrient = 0x2D41,
+    GyroscopeOrientation = 0x2D46,
+    MagnetometerOrientation = 0x2D4C,
+    ARVRStabilizationRotVec = 0x3E2D,
+    ARVRStabilizationGameRotVec = 0x3E2E,
+    SignificantMotionDetectConf = 0xC274,
+    ShakeDetectorConfig = 0x7D7D,
+    MaximumFusionPeriod = 0xD7D7,
+    SerialNumber = 0x4B4B,
+    EnvSensorPressureCalibration = 0x39AF,
+    EnvSensorTempCalibration = 0x4D20,
+    EnvSensorHumidityCalibration = 0x1AC9,
+    EnvSensorAmbLightCalibration = 0x39B1,
+    EnvSensorProximityCalibration = 0x4DA2,
+    ALSCalibration = 0xD401,
+    ProximitySensorCalibration = 0xD402,
+    StabilityDetectorConfig = 0xED85,
+    UserRecord = 0x74B4,
+    MotionEngineTimeSourceSel = 0xD403,
+    GyroIntegratedRotVecConfig = 0xA1A2,
+}
+
+impl FRSConfiguration {
+    pub fn addr(self) -> [u8; 2] {
+        let address = self as u16;
+        address.to_le_bytes()
+    }
+}
+
+impl core::convert::TryFrom<u16> for FRSConfiguration {
+    type Error = ();
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            0x7979 => Ok(Self::AgmStaticCalibration),
+            0x4D4D => Ok(Self::AgmNominalCalibration),
+            0x8A8A => Ok(Self::SraStaticCalibration),
+            0x4E4E => Ok(Self::SraNominalCalibration),
+            0x1F1F => Ok(Self::DynamicCalibration),
+            0xD3E2 => Ok(Self::MotionEnginePWRMGMT),
+            0x2D3E => Ok(Self::SystemOrientation),
+            0x2D41 => Ok(Self::PrimaryAccelerometerOrient),
+            0x2D46 => Ok(Self::GyroscopeOrientation),
+            0x2D4C => Ok(Self::MagnetometerOrientation),
+            0x3E2D => Ok(Self::ARVRStabilizationRotVec),
+            0x3E2E => Ok(Self::ARVRStabilizationGameRotVec),
+            0xC274 => Ok(Self::SignificantMotionDetectConf),
+            0x7D7D => Ok(Self::ShakeDetectorConfig),
+            0xD7D7 => Ok(Self::MaximumFusionPeriod),
+            0x4B4B => Ok(Self::SerialNumber),
+            0x39AF => Ok(Self::EnvSensorPressureCalibration),
+            0x4D20 => Ok(Self::EnvSensorTempCalibration),
+            0x1AC9 => Ok(Self::EnvSensorHumidityCalibration),
+            0x39B1 => Ok(Self::EnvSensorAmbLightCalibration),
+            0x4DA2 => Ok(Self::EnvSensorProximityCalibration),
+            0xD401 => Ok(Self::ALSCalibration),
+            0xD402 => Ok(Self::ProximitySensorCalibration),
+            0xED85 => Ok(Self::StabilityDetectorConfig),
+            0x74B4 => Ok(Self::UserRecord),
+            0xD403 => Ok(Self::MotionEngineTimeSourceSel),
+            0xA1A2 => Ok(Self::GyroIntegratedRotVecConfig),
+            _ => Err(()),
+        }
+    }
 }
 
 impl Register {
