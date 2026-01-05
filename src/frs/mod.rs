@@ -95,7 +95,7 @@ impl FRSData {
     // }
 
     pub fn process_read_response(&mut self, data: &[u8]) -> Result<(), SensorError> {
-        if data.len() < 16 && data[0] == Register::Read(SH2Read::FrsReadResponse).addr() {
+        if data.len() >= 16 && data[0] == Register::Read(SH2Read::FrsReadResponse).addr() {
             self.length = Some(data[1] >> 4);
             self.status = Some(FRSData::process_status(data[1]));
             self.offset = Some(u16::from_le_bytes(

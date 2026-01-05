@@ -317,7 +317,7 @@ where
         )
         .expect("Failed to generate Packet for FRS READ");
 
-        self.send_packet(2, write.full_packet().as_slice());
+        self.send_packet(2, write.as_mut_data(false));
         println!("LOOKING FOR PACKET");
         let packet = self.wait_for_packet(2, Some(SH2Read::FrsReadResponse), Some(10));
         println!("FETCH COMPLETE");
