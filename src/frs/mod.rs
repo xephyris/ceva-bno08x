@@ -4,17 +4,20 @@ use crate::{
     register::{FRSConfiguration, Register, SH2Read, SH2Write},
 };
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, defmt::Format)]
 pub enum FRSStatus {
     NoError,
     UnrecognizedFRSType,
     Busy,
     ReadRecordCompleted,
     Deprecated,
+    RecordEmpty,
+    DeviceError,
     InvalidResponse,
+    Reserved,
 }
 
-#[derive(Debug)]
+#[derive(Debug, defmt::Format)]
 pub struct FRSData {
     request_type: FRSConfiguration,
     read_write: bool,
@@ -137,6 +140,11 @@ impl FRSData {
             2 => FRSStatus::Busy,
             3 => FRSStatus::ReadRecordCompleted,
             4 => FRSStatus::Deprecated,
+            5 => FRSStatus::RecordEmpty,
+            6 => FRSStatus::Deprecated,
+            7 => FRSStatus::Deprecated,
+            8 => FRSStatus::DeviceError,
+            9..16 => FRSStatus::Reserved,
             _ => FRSStatus::InvalidResponse,
         }
     }

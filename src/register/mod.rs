@@ -115,7 +115,7 @@ pub enum I2CAddress {
 
 #[allow(dead_code)]
 #[repr(u16)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, defmt::Format)]
 pub enum FRSConfiguration {
     AgmStaticCalibration = 0x7979,
     AgmNominalCalibration = 0x4D4D,

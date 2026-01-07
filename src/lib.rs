@@ -113,13 +113,23 @@ where
         out
     }
 
-    pub fn send_packet(&mut self, channel: u8, data: &[u8]) {
+    pub fn send_packet_from_data(&mut self, channel: u8, data: &[u8]) {
         let seq = self.increment_seq_num(WRITE, channel, None);
         let mut write = Packet::from_data_buf(data, channel, seq, false).expect("PacketGen failed");
 
         debug!("Packet Created");
         self.i2c
             .write(self.address, write.full_packet().as_slice())
+            .ok();
+        debug!("PACKET SENT");
+    }
+
+    pub fn send_full_packet(&mut self, channel: u8, mut packet: Packet) {
+        let seq = self.increment_seq_num(WRITE, channel, None);
+
+        debug!("Packet Created");
+        self.i2c
+            .write(self.address, packet.full_packet().as_slice())
             .ok();
         debug!("PACKET SENT");
     }
@@ -183,7 +193,7 @@ where
     pub fn read_product_id(&mut self) -> Result<bool, SensorError> {
         debug!("READING P ID");
         let mut buf_data = [Register::Write(SH2Write::ProductIDRequest).addr(), 0x00];
-        self.send_packet(2, &buf_data);
+        self.send_packet_from_data(2, &buf_data);
         // self.increment_seq_num(WRITE, 2, None);
 
         let mut retries = 0;
@@ -234,7 +244,7 @@ where
                     }
                 }
                 warn!("ENABLE FEATURES OUTPUT: {}", &data_buffer);
-                self.send_packet(2, &data_buffer);
+                self.send_packet_from_data(2, &data_buffer);
 
                 let mut retries = 0;
                 let mut out = Packet::new(true);
@@ -317,17 +327,15 @@ where
         )
         .expect("Failed to generate Packet for FRS READ");
 
-        self.send_packet(2, write.as_mut_data(false));
+        self.send_packet_from_data(2, write.as_mut_data(false));
         println!("LOOKING FOR PACKET");
         let packet = self.wait_for_packet(2, Some(SH2Read::FrsReadResponse), Some(10));
         println!("FETCH COMPLETE");
         if let Ok(mut packet) = packet {
-            println!("FULL PACKET :{}", packet.full_packet().as_slice());
-            println!("WITH SPACER: {}", packet.as_mut_data(true));
             frs_data
                 .process_read_response(packet.as_mut_data(false))
                 .expect("failed to parse FRS Response");
-            dbg!("FRS RESPONSE : {:?}", frs_data);
+            println!("FRS RESPONSE : {:?}", frs_data);
         }
     }
 }
