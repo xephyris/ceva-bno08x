@@ -14,7 +14,7 @@ use defmt::*;
 
 use crate::config::DEFAULT_REPORT_INTERVAL;
 use crate::data::{Packet, ProductId, VarBuf};
-use crate::frs::FRSData;
+use crate::frs::FRSDataRead;
 use crate::parsing::{get_feature_dependencies, get_report_length};
 use crate::register::*;
 use crate::sensors::Sensors;
@@ -318,7 +318,7 @@ where
     }
 
     pub fn frs_read(&mut self, record_id: FRSConfiguration) {
-        let mut frs_data = FRSData::new_read(record_id);
+        let mut frs_data = FRSDataRead::new(record_id);
         let mut write = Packet::from_data_buf(
             &frs_data.generate_read_request().ok().unwrap(),
             2,
@@ -397,6 +397,5 @@ pub enum SensorError {
     Placeholder, // Add other errors for your driver here.
     Unimplemented,
     PacketRetrievalFailed,
-    ReadWriteFlipped,
     InvalidLength,
 }
